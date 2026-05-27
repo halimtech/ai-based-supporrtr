@@ -49,6 +49,10 @@ function App() {
   // Join room state
   const [joinCode, setJoinCode] = useState("");
 
+  // Onboarding modal state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
   useEffect(() => {
     if (token) {
       api("/api/me")
@@ -63,6 +67,13 @@ function App() {
         });
     }
   }, [token]);
+
+  useEffect(() => {
+    if (view === "dashboard") {
+      const disabled = localStorage.getItem("onboardingDisabled") === "1";
+      setShowOnboarding(!disabled);
+    }
+  }, [view]);
 
   useEffect(() => {
     if (view === "room" && currentRoom) {
@@ -148,6 +159,13 @@ function App() {
     setRooms([]);
     setCurrentRoom(null);
     setRoomData(null);
+  }
+
+  function dismissOnboarding() {
+    if (dontShowAgain) {
+      localStorage.setItem("onboardingDisabled", "1");
+    }
+    setShowOnboarding(false);
   }
 
   async function createRoom(e) {
@@ -380,6 +398,51 @@ function App() {
             </button>
           </div>
         </header>
+
+        {showOnboarding ? (
+          <div className="modal-overlay" role="dialog" aria-modal="true">
+            <div className="modal-card">
+              <h2>Welcome to Core Delight</h2>
+              <p className="subtitle">A simple way for teams to make fair, structured decisions together.</p>
+
+              <div className="onboarding-steps">
+                <div className="onboarding-step">
+                  <strong>1. Create or join a room</strong>
+                  <p>Set up a decision topic and invite teammates with a 6-character code.</p>
+                </div>
+                <div className="onboarding-step">
+                  <strong>2. Vote</strong>
+                  <p>Everyone privately rates each option on the criteria that matter. Set your own weights to reflect what you care about.</p>
+                </div>
+                <div className="onboarding-step">
+                  <strong>3. Run the analysis</strong>
+                  <p>The algorithm calculates the fairest group choice and shows how much consensus you have.</p>
+                </div>
+                <div className="onboarding-step">
+                  <strong>4. Discuss</strong>
+                  <p>Use the chat to talk through results and next steps with your team.</p>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={dontShowAgain}
+                    onChange={(e) => setDontShowAgain(e.target.checked)}
+                  />
+                  Don't show this again
+                </label>
+                <button className="secondary-button" onClick={dismissOnboarding} type="button">
+                  Skip
+                </button>
+                <button className="primary-button" onClick={dismissOnboarding} type="button">
+                  Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {showCreate ? (
           <div className="panel" style={{ marginBottom: 20 }}>
