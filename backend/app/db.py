@@ -154,19 +154,25 @@ def init_db():
             """
         )
     conn.commit()
-
-    # Migration: add description column to rooms if not present (for existing DBs)
-    try:
-        cursor2 = _cursor(conn)
-        cursor2.execute("ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
-        conn.commit()
-        cursor2.close()
-    except Exception:
-        # Column already exists, ignore
-        pass
-
     cursor.close()
     conn.close()
+
+    # Migration: add description column to rooms if not present (for existing DBs)
+    conn2 = get_db()
+    if IS_POSTGRES:
+        conn2.autocommit = True
+    cursor2 = _cursor(conn2)
+    try:
+        cursor2.execute("ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        if not IS_POSTGRES:
+            conn2.commit()
+    except Exception:
+        # Column already exists, ignore
+        if not IS_POSTGRES:
+            conn2.rollback()
+    finally:
+        cursor2.close()
+        conn2.close()
 
 
 def hash_password(password: str) -> str:
