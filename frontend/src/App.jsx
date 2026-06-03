@@ -50,6 +50,10 @@ function App() {
   // Brief description popup state
   const [showBriefDescription, setShowBriefDescription] = useState(false);
 
+  // Edit room state
+  const [showEditRoom, setShowEditRoom] = useState(false);
+  const [editRoomDescription, setEditRoomDescription] = useState("");
+
   // Join room state
   const [joinCode, setJoinCode] = useState("");
 
@@ -237,6 +241,30 @@ function App() {
     }
     setView("room");
     loadRoom(room.id);
+  }
+
+  async function handleUpdateRoom(e) {
+    e.preventDefault();
+    if (!currentRoom) return;
+    try {
+      const res = await api(`/api/rooms/${currentRoom.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ description: editRoomDescription.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus(data.detail || "Could not update room.");
+        return;
+      }
+      setShowEditRoom(false);
+      setStatus("Room updated.");
+      // Refresh current room data
+      const updatedRoom = data.room;
+      setCurrentRoom((prev) => ({ ...prev, description: updatedRoom.description }));
+      setRoomData((prev) => (prev ? { ...prev, room: { ...prev.room, description: updatedRoom.description } } : prev));
+    } catch {
+      setStatus("Network error while updating room.");
+    }
   }
 
   async function sendMessage(e) {
@@ -588,6 +616,33 @@ function App() {
         </div>
       ) : null}
 
+      {/* Edit Room Modal */}
+      {showEditRoom && currentRoom?.creator_id === user?.id ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Edit Room</h2>
+            <p className="subtitle">Update the brief description for {currentRoom?.name}.</p>
+            <form onSubmit={handleUpdateRoom} className="create-room-form" style={{ gap: 18 }}>
+              <label className="field">
+                <span>Brief Description</span>
+                <textarea
+                  value={editRoomDescription}
+                  onChange={(e) => setEditRoomDescription(e.target.value)}
+                  placeholder="e.g. We'll be voting about a trip to Egypt..."
+                  rows={4}
+                  maxLength={1000}
+                  className="description-textarea"
+                />
+              </label>
+              <div className="form-actions">
+                <button className="primary-button" type="submit">Save Changes</button>
+                <button className="secondary-button" type="button" onClick={() => setShowEditRoom(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       <header className="topbar">
         <div>
           <p className="eyebrow">Room {currentRoom?.code}</p>
@@ -598,6 +653,18 @@ function App() {
           {roomDesc.trim() ? (
             <button className="brief-desc-button" onClick={() => setShowBriefDescription(true)} type="button">
               📋 Brief Description
+            </button>
+          ) : null}
+          {currentRoom?.creator_id === user?.id ? (
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setEditRoomDescription(roomDesc);
+                setShowEditRoom(true);
+              }}
+              type="button"
+            >
+              ✏️ Edit Room
             </button>
           ) : null}
           <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentRoom(null); }} type="button">
@@ -612,7 +679,7 @@ function App() {
       <main className="layout">
         <section className="workspace">
           <nav className="stepper" aria-label="Room tabs">
-            {["Vote", "Results", "Chat"].map((label) => (
+            {["Vote", "Results"].map((label) => (
               <button
                 key={label}
                 className={`step-chip ${roomTab === label.toLowerCase() ? "is-active" : ""}`}
@@ -805,31 +872,29 @@ function App() {
             </div>
           ) : null}
 
-          {roomTab === "chat" ? (
-            <div className="panel chat-panel">
-              <div className="section-heading">
-                <h2>Discussion</h2>
-                <p>Talk about the decision and share your thoughts.</p>
-              </div>
-              <div className="chat-messages">
-                {messages.map((msg) => (
-                  <div className={`chat-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
-                    <span className="chat-author">{msg.author}</span>
-                    <span className="chat-content">{msg.content}</span>
-                    <span className="chat-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-              <form className="inline-form chat-form" onSubmit={sendMessage}>
-                <input value={messageDraft} onChange={(e) => setMessageDraft(e.target.value)} placeholder="Type a message..." />
-                <button className="primary-button" type="submit">Send</button>
-              </form>
-            </div>
-          ) : null}
         </section>
 
         <aside className="sidebar">
+          <section className="sidebar-panel chat-sidebar-panel">
+            <div className="section-heading">
+              <h3>Discussion</h3>
+            </div>
+            <div className="chat-messages sidebar-chat-messages">
+              {messages.map((msg) => (
+                <div className={`chat-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
+                  <span className="chat-author">{msg.author}</span>
+                  <span className="chat-content">{msg.content}</span>
+                  <span className="chat-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+            <form className="inline-form chat-form" onSubmit={sendMessage}>
+              <input value={messageDraft} onChange={(e) => setMessageDraft(e.target.value)} placeholder="Type a message..." />
+              <button className="primary-button" type="submit">Send</button>
+            </form>
+          </section>
+
           <section className="sidebar-panel">
             <p className="eyebrow">Room Info</p>
             <h3>{currentRoom?.name}</h3>

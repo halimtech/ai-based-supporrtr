@@ -517,6 +517,19 @@ def get_weights(room_id: int):
     return [dict(row) for row in rows]
 
 
+def update_room_description(room_id: int, description: str):
+    conn = get_db()
+    cursor = _cursor(conn)
+    ph = _ph()
+    cursor.execute(
+        f"UPDATE rooms SET description = {ph} WHERE id = {ph}",
+        (description, room_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 def is_room_member(room_id: int, user_id: int) -> bool:
     conn = get_db()
     cursor = _cursor(conn)

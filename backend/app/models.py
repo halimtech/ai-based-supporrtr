@@ -58,3 +58,7 @@ class SaveRatingRequest(BaseModel):
 class SaveWeightRequest(BaseModel):
     criterion: str = Field(..., min_length=1, max_length=80)
     value: int = Field(..., ge=1, le=9)
+
+
+class UpdateRoomRequest(BaseModel):
+    description: str = Field("", max_length=1000)

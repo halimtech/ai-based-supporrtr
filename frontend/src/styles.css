@@ -113,7 +113,7 @@ button {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
   gap: 20px;
 }
 
@@ -550,6 +550,26 @@ button {
 
 .chat-form {
   margin-top: 4px;
+}
+
+/* Sidebar Chat */
+.chat-sidebar-panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  min-height: 280px;
+}
+
+.sidebar-chat-messages {
+  display: grid;
+  gap: 8px;
+  align-content: flex-start;
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.sidebar-chat-messages .chat-message {
+  max-width: 95%;
 }
 
 /* Vote */

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .algorithm import analyze_decision
-from .models import DecisionRequest, RegisterRequest, LoginRequest, CreateRoomRequest, JoinRoomRequest, SendMessageRequest, SaveRatingRequest, SaveWeightRequest
+from .models import DecisionRequest, RegisterRequest, LoginRequest, CreateRoomRequest, JoinRoomRequest, SendMessageRequest, SaveRatingRequest, SaveWeightRequest, UpdateRoomRequest
 from .sample_data import SAMPLE_SESSION
 from . import db
 
@@ -104,6 +104,20 @@ def get_room(room_id: int, user: dict = Depends(get_current_user)):
     ratings = db.get_ratings(room_id)
     weights = db.get_weights(room_id)
     return {"room": room, "members": members, "messages": messages, "ratings": ratings, "weights": weights}
+
+
+@app.put("/api/rooms/{room_id}")
+def update_room(room_id: int, payload: UpdateRoomRequest, user: dict = Depends(get_current_user)):
+    if not db.is_room_member(room_id, user["id"]):
+        raise HTTPException(status_code=403, detail="You are not a member of this room")
+    room = db.get_room_by_id(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["creator_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Only the room creator can edit the room")
+    db.update_room_description(room_id, payload.description)
+    updated = db.get_room_by_id(room_id)
+    return {"room": updated}
 
 
 @app.post("/api/rooms/{room_id}/messages")
