@@ -43,8 +43,12 @@ function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [roomTitle, setRoomTitle] = useState("");
+  const [roomDescription, setRoomDescription] = useState("");
   const [roomAlternatives, setRoomAlternatives] = useState([""]);
   const [roomCriteria, setRoomCriteria] = useState([{ name: "", weight: 20 }]);
+
+  // Brief description popup state
+  const [showBriefDescription, setShowBriefDescription] = useState(false);
 
   // Join room state
   const [joinCode, setJoinCode] = useState("");
@@ -179,7 +183,7 @@ function App() {
     try {
       const res = await api("/api/rooms", {
         method: "POST",
-        body: JSON.stringify({ name: roomName.trim(), title: roomTitle.trim(), alternatives: alts, criteria: crits }),
+        body: JSON.stringify({ name: roomName.trim(), title: roomTitle.trim(), description: roomDescription.trim(), alternatives: alts, criteria: crits }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -189,6 +193,7 @@ function App() {
       setShowCreate(false);
       setRoomName("");
       setRoomTitle("");
+      setRoomDescription("");
       setRoomAlternatives([""]);
       setRoomCriteria([{ name: "", weight: 20 }]);
       loadRooms();
@@ -223,6 +228,13 @@ function App() {
     setCurrentRoom(room);
     setAnalysis(null);
     setRoomTab("vote");
+    // Show brief description popup if the room has a description
+    const desc = room.description;
+    if (desc && desc.trim()) {
+      setShowBriefDescription(true);
+    } else {
+      setShowBriefDescription(false);
+    }
     setView("room");
     loadRoom(room.id);
   }
@@ -461,6 +473,17 @@ function App() {
                   <input value={roomTitle} onChange={(e) => setRoomTitle(e.target.value)} placeholder="e.g. Where should we travel?" required />
                 </label>
               </div>
+              <label className="field">
+                <span>Brief Description</span>
+                <textarea
+                  value={roomDescription}
+                  onChange={(e) => setRoomDescription(e.target.value)}
+                  placeholder="e.g. We'll be voting about a trip to Egypt. The voting will include budget, food, and accommodation options."
+                  rows={3}
+                  maxLength={1000}
+                  className="description-textarea"
+                />
+              </label>
               <div className="two-columns">
                 <div>
                   <h4>Alternatives</h4>
@@ -544,8 +567,27 @@ function App() {
   }
 
   // Room view
+  const roomDesc = roomData?.room?.description || currentRoom?.description || "";
+
   return (
     <div className="app-shell">
+      {/* Brief Description Popup */}
+      {showBriefDescription && roomDesc.trim() ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card brief-desc-modal">
+            <div className="brief-desc-icon">📋</div>
+            <h2>Brief Description</h2>
+            <p className="subtitle">{currentRoom?.name}</p>
+            <div className="brief-desc-content">
+              <p>{roomDesc}</p>
+            </div>
+            <button className="primary-button" onClick={() => setShowBriefDescription(false)} type="button">
+              Click to Continue
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <header className="topbar">
         <div>
           <p className="eyebrow">Room {currentRoom?.code}</p>
@@ -553,6 +595,11 @@ function App() {
           <p className="subtitle">{currentRoom?.title}</p>
         </div>
         <div className="topbar-actions">
+          {roomDesc.trim() ? (
+            <button className="brief-desc-button" onClick={() => setShowBriefDescription(true)} type="button">
+              📋 Brief Description
+            </button>
+          ) : null}
           <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentRoom(null); }} type="button">
             Back to Dashboard
           </button>

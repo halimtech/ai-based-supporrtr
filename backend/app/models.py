@@ -34,8 +34,9 @@ class LoginRequest(BaseModel):
 
 
 class CreateRoomRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=120)
-    title: str = Field(..., min_length=1, max_length=120)
+    name: str = Field("", max_length=120)
+    title: str = Field("", max_length=120)
+    description: str = Field("", max_length=1000)
     alternatives: list[str] = Field(..., min_length=1)
     criteria: list[CriterionInput] = Field(..., min_length=1)
 

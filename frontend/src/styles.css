@@ -650,6 +650,102 @@ button {
   accent-color: var(--accent);
 }
 
+/* Brief Description */
+.description-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper-strong);
+  font: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.description-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.brief-desc-modal {
+  text-align: center;
+  animation: briefDescSlideIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.brief-desc-icon {
+  font-size: 2.8rem;
+  margin-bottom: 4px;
+  animation: briefDescBounce 600ms ease 200ms both;
+}
+
+.brief-desc-content {
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(217, 119, 6, 0.06));
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.brief-desc-content p {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.02rem;
+  line-height: 1.6;
+}
+
+.brief-desc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.1), rgba(15, 118, 110, 0.04));
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 200ms ease, box-shadow 200ms ease;
+  backdrop-filter: blur(8px);
+}
+
+.brief-desc-button:hover {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
+  box-shadow: 0 4px 16px rgba(15, 118, 110, 0.18);
+  transform: translateY(-1px);
+}
+
+.brief-desc-button:active {
+  transform: translateY(0);
+}
+
+@keyframes briefDescSlideIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes briefDescBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-15deg);
+  }
+  60% {
+    transform: scale(1.2) rotate(5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
 @media (max-width: 960px) {
   .layout,
   .result-grid,
@@ -684,3 +780,4 @@ button {
     margin-right: 0;
   }
 }
+

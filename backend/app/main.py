@@ -71,7 +71,7 @@ def me(user: dict = Depends(get_current_user)):
 def create_room(payload: CreateRoomRequest, user: dict = Depends(get_current_user)):
     criteria = [{"name": c.name, "weight": c.weight} for c in payload.criteria]
     alternatives = payload.alternatives
-    room = db.create_room(payload.name, payload.title, user["id"], criteria, alternatives)
+    room = db.create_room(payload.name, payload.title, user["id"], criteria, alternatives, description=payload.description)
     if not room:
         raise HTTPException(status_code=500, detail="Could not create room")
     return {"room": room}

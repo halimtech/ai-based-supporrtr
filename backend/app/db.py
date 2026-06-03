@@ -57,6 +57,7 @@ def init_db():
                 code TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 title TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
                 creator_id INTEGER NOT NULL REFERENCES users(id),
                 criteria_json TEXT NOT NULL DEFAULT '[]',
                 alternatives_json TEXT NOT NULL DEFAULT '[]',
@@ -112,6 +113,7 @@ def init_db():
                 code TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
                 title TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
                 creator_id INTEGER NOT NULL REFERENCES users(id),
                 criteria_json TEXT NOT NULL DEFAULT '[]',
                 alternatives_json TEXT NOT NULL DEFAULT '[]',
@@ -152,6 +154,17 @@ def init_db():
             """
         )
     conn.commit()
+
+    # Migration: add description column to rooms if not present (for existing DBs)
+    try:
+        cursor2 = _cursor(conn)
+        cursor2.execute("ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        conn.commit()
+        cursor2.close()
+    except Exception:
+        # Column already exists, ignore
+        pass
+
     cursor.close()
     conn.close()
 
@@ -233,7 +246,7 @@ def get_user_by_username(username: str):
     return dict(row) if row else None
 
 
-def create_room(name: str, title: str, creator_id: int, criteria: list, alternatives: list):
+def create_room(name: str, title: str, creator_id: int, criteria: list, alternatives: list, description: str = ""):
     conn = get_db()
     cursor = _cursor(conn)
     code = generate_room_code()
@@ -241,16 +254,16 @@ def create_room(name: str, title: str, creator_id: int, criteria: list, alternat
     try:
         if IS_POSTGRES:
             cursor.execute(
-                f"""INSERT INTO rooms (code, name, title, creator_id, criteria_json, alternatives_json, created_at)
-                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}) RETURNING id""",
-                (code, name, title, creator_id, json.dumps(criteria), json.dumps(alternatives), now_iso()),
+                f"""INSERT INTO rooms (code, name, title, description, creator_id, criteria_json, alternatives_json, created_at)
+                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}) RETURNING id""",
+                (code, name, title, description, creator_id, json.dumps(criteria), json.dumps(alternatives), now_iso()),
             )
             room_id = cursor.fetchone()["id"]
         else:
             cursor.execute(
-                f"""INSERT INTO rooms (code, name, title, creator_id, criteria_json, alternatives_json, created_at)
-                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
-                (code, name, title, creator_id, json.dumps(criteria), json.dumps(alternatives), now_iso()),
+                f"""INSERT INTO rooms (code, name, title, description, creator_id, criteria_json, alternatives_json, created_at)
+                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
+                (code, name, title, description, creator_id, json.dumps(criteria), json.dumps(alternatives), now_iso()),
             )
             room_id = cursor.lastrowid
         cursor.execute(
@@ -258,7 +271,7 @@ def create_room(name: str, title: str, creator_id: int, criteria: list, alternat
             (room_id, creator_id, now_iso()),
         )
         conn.commit()
-        return {"id": room_id, "code": code, "name": name, "title": title, "creator_id": creator_id}
+        return {"id": room_id, "code": code, "name": name, "title": title, "description": description, "creator_id": creator_id}
     except DBIntegrityError:
         return None
     finally:
