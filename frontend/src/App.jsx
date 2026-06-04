@@ -650,11 +650,6 @@ function App() {
           <p className="subtitle">{currentRoom?.title}</p>
         </div>
         <div className="topbar-actions">
-          {roomDesc.trim() ? (
-            <button className="brief-desc-button" onClick={() => setShowBriefDescription(true)} type="button">
-              📋 Brief Description
-            </button>
-          ) : null}
           {currentRoom?.creator_id === user?.id ? (
             <button
               className="secondary-button"
@@ -875,6 +870,18 @@ function App() {
         </section>
 
         <aside className="sidebar">
+          {roomDesc.trim() ? (
+            <section className="sidebar-panel">
+              <button
+                className="brief-desc-button"
+                onClick={() => setShowBriefDescription(true)}
+                type="button"
+                style={{ display: 'flex', width: '100%', justifyContent: 'center' }}
+              >
+                📋 Brief Description
+              </button>
+            </section>
+          ) : null}
           <section className="sidebar-panel chat-sidebar-panel">
             <div className="section-heading">
               <h3>Discussion</h3>
