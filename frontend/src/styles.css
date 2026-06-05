@@ -449,13 +449,13 @@ button {
 }
 
 /* Dashboard */
-.room-grid {
+.space-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
 }
 
-.room-card {
+.space-card {
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.72);
@@ -464,22 +464,22 @@ button {
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
-.room-card:hover {
+.space-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow);
 }
 
-.room-card h3 {
+.space-card h3 {
   margin: 0 0 6px;
   font-size: 1.1rem;
 }
 
-.room-card p {
+.space-card p {
   margin: 0 0 10px;
   color: var(--muted);
 }
 
-.room-code {
+.space-code {
   display: inline-block;
   padding: 6px 12px;
   border-radius: 999px;
@@ -502,15 +502,15 @@ button {
   align-items: center;
 }
 
-/* Chat */
-.chat-panel {
+/* Discussion */
+.discussion-panel {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
   min-height: 420px;
 }
 
-.chat-messages {
+.discussion-messages {
   display: grid;
   gap: 10px;
   align-content: flex-start;
@@ -518,7 +518,7 @@ button {
   max-height: 520px;
 }
 
-.chat-message {
+.discussion-message {
   display: grid;
   gap: 4px;
   padding: 10px 14px;
@@ -528,39 +528,39 @@ button {
   max-width: 80%;
 }
 
-.chat-message.is-me {
+.discussion-message.is-me {
   background: var(--accent-soft);
   justify-self: flex-end;
 }
 
-.chat-author {
+.discussion-author {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--accent);
 }
 
-.chat-content {
+.discussion-content {
   font-size: 0.95rem;
 }
 
-.chat-time {
+.discussion-time {
   font-size: 0.72rem;
   color: var(--muted);
 }
 
-.chat-form {
+.discussion-form {
   margin-top: 4px;
 }
 
-/* Sidebar Chat */
-.chat-sidebar-panel {
+/* Sidebar Discussion */
+.discussion-sidebar-panel {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
   min-height: 280px;
 }
 
-.sidebar-chat-messages {
+.sidebar-discussion-messages {
   display: grid;
   gap: 8px;
   align-content: flex-start;
@@ -568,7 +568,7 @@ button {
   max-height: 320px;
 }
 
-.sidebar-chat-messages .chat-message {
+.sidebar-discussion-messages .discussion-message {
   max-width: 95%;
 }
 
@@ -764,6 +764,149 @@ button {
     opacity: 1;
     transform: scale(1) rotate(0deg);
   }
+}
+
+/* Notifications */
+.notification-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2000;
+  display: grid;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.notification-toast {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: toastIn 300ms ease;
+}
+
+.notification-toast.info {
+  border-left: 4px solid var(--accent);
+}
+
+.notification-toast.success {
+  border-left: 4px solid #22c55e;
+}
+
+.notification-toast.warning {
+  border-left: 4px solid #f59e0b;
+}
+
+@keyframes toastIn {
+  0% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toastOut {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+/* Away Brief */
+.away-brief-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.away-brief-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+}
+
+.intro-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.intro-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+}
+
+.intro-card h4 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.intro-card p,
+.intro-card ul {
+  margin: 0;
+  color: var(--muted);
+}
+
+.intro-card ul {
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.consensus-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.deviator-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.deviator-card h4 {
+  margin: 0 0 6px;
+  color: #b91c1c;
+}
+
+.deviator-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.consensus-ok-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.consensus-ok-card h4 {
+  margin: 0 0 6px;
+  color: #15803d;
+}
+
+.consensus-ok-card p {
+  margin: 0;
+  color: var(--muted);
 }
 
 @media (max-width: 960px) {

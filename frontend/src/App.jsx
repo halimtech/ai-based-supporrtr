@@ -19,16 +19,16 @@ function ratingKey(participant, alternative, criterion) {
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(null);
-  const [view, setView] = useState("auth"); // auth, intro, dashboard, room
-  const [rooms, setRooms] = useState([]);
-  const [currentRoom, setCurrentRoom] = useState(null);
-  const [roomData, setRoomData] = useState(null);
+  const [view, setView] = useState("auth"); // auth, intro, dashboard, space
+  const [spaces, setSpaces] = useState([]);
+  const [currentSpace, setCurrentSpace] = useState(null);
+  const [spaceData, setSpaceData] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messageDraft, setMessageDraft] = useState("");
   const [ratingsMap, setRatingsMap] = useState({});
   const [weightsMap, setWeightsMap] = useState({});
   const [analysis, setAnalysis] = useState(null);
-  const [roomTab, setRoomTab] = useState("vote"); // vote, results, chat
+  const [spaceTab, setSpaceTab] = useState("introduction"); // introduction, vote, results, consensus
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef(null);
@@ -39,27 +39,35 @@ function App() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
-  // Create room state
+  // Create space state
   const [showCreate, setShowCreate] = useState(false);
-  const [roomName, setRoomName] = useState("");
-  const [roomTitle, setRoomTitle] = useState("");
-  const [roomDescription, setRoomDescription] = useState("");
-  const [roomAlternatives, setRoomAlternatives] = useState([""]);
-  const [roomCriteria, setRoomCriteria] = useState([{ name: "", weight: 20 }]);
+  const [spaceName, setSpaceName] = useState("");
+  const [spaceTitle, setSpaceTitle] = useState("");
+  const [spaceDescription, setSpaceDescription] = useState("");
+  const [spaceAlternatives, setSpaceAlternatives] = useState([""]);
+  const [spaceCriteria, setSpaceCriteria] = useState([{ name: "", weight: 20 }]);
 
   // Brief description popup state
   const [showBriefDescription, setShowBriefDescription] = useState(false);
 
-  // Edit room state
-  const [showEditRoom, setShowEditRoom] = useState(false);
-  const [editRoomDescription, setEditRoomDescription] = useState("");
+  // Edit space state
+  const [showEditSpace, setShowEditSpace] = useState(false);
+  const [editSpaceDescription, setEditSpaceDescription] = useState("");
 
-  // Join room state
+  // Join space state
   const [joinCode, setJoinCode] = useState("");
 
   // Onboarding modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const prevCountsRef = useRef({ messages: 0, members: 0, ratings: 0 });
+
+  // Away brief
+  const [showAwayBrief, setShowAwayBrief] = useState(false);
+  const [awayBriefData, setAwayBriefData] = useState(null);
 
   useEffect(() => {
     if (token) {
@@ -68,7 +76,7 @@ function App() {
         .then((data) => {
           setUser(data);
           setView("dashboard");
-          loadRooms();
+          loadSpaces();
         })
         .catch(() => {
           logout();
@@ -84,13 +92,13 @@ function App() {
   }, [view]);
 
   useEffect(() => {
-    if (view === "room" && currentRoom) {
+    if (view === "space" && currentSpace) {
       const interval = setInterval(() => {
-        loadRoom(currentRoom.id);
+        loadSpace(currentSpace.id);
       }, 8000);
       return () => clearInterval(interval);
     }
-  }, [view, currentRoom]);
+  }, [view, currentSpace]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -98,22 +106,31 @@ function App() {
     }
   }, [messages]);
 
-  async function loadRooms() {
+  function addNotification(message, type = "info") {
+    const id = Date.now() + Math.random();
+    setNotifications((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 5000);
+  }
+
+  async function loadSpaces() {
     try {
-      const res = await api("/api/rooms");
+      const res = await api("/api/spaces");
       const data = await res.json();
-      setRooms(data.rooms || []);
+      setSpaces(data.spaces || []);
     } catch {
-      setStatus("Could not load rooms.");
+      setStatus("Could not load spaces.");
     }
   }
 
-  async function loadRoom(roomId) {
+  async function loadSpace(spaceId) {
     try {
-      const res = await api(`/api/rooms/${roomId}`);
+      const res = await api(`/api/spaces/${spaceId}`);
       const data = await res.json();
-      setRoomData(data);
-      setMessages(data.messages || []);
+      setSpaceData(data);
+      const newMessages = data.messages || [];
+      setMessages(newMessages);
       const nextMap = {};
       (data.ratings || []).forEach((r) => {
         nextMap[ratingKey(r.participant, r.alternative, r.criterion)] = r.value;
@@ -124,8 +141,26 @@ function App() {
         nextWeights[w.criterion] = w.value;
       });
       setWeightsMap(nextWeights);
+
+      // Detect changes for notifications
+      const prev = prevCountsRef.current;
+      const newMembers = (data.members || []).length;
+      const newRatingsCount = (data.ratings || []).length;
+      if (prev.messages > 0 && newMessages.length > prev.messages) {
+        const latest = newMessages[newMessages.length - 1];
+        if (latest.author !== user?.username) {
+          addNotification(`New message from ${latest.author}`, "info");
+        }
+      }
+      if (prev.members > 0 && newMembers > prev.members) {
+        addNotification("A new member joined the space", "success");
+      }
+      if (prev.ratings > 0 && newRatingsCount > prev.ratings) {
+        addNotification("New ratings were submitted", "info");
+      }
+      prevCountsRef.current = { messages: newMessages.length, members: newMembers, ratings: newRatingsCount };
     } catch {
-      setStatus("Could not load room.");
+      setStatus("Could not load space.");
     }
   }
 
@@ -152,7 +187,7 @@ function App() {
         setView("intro");
       } else {
         setView("dashboard");
-        loadRooms();
+        loadSpaces();
       }
     } catch {
       setAuthError("Network error.");
@@ -164,9 +199,9 @@ function App() {
     setToken(null);
     setUser(null);
     setView("auth");
-    setRooms([]);
-    setCurrentRoom(null);
-    setRoomData(null);
+    setSpaces([]);
+    setCurrentSpace(null);
+    setSpaceData(null);
   }
 
   function dismissOnboarding() {
@@ -176,116 +211,133 @@ function App() {
     setShowOnboarding(false);
   }
 
-  async function createRoom(e) {
+  async function createSpace(e) {
     e.preventDefault();
-    const alts = roomAlternatives.map((a) => a.trim()).filter(Boolean);
-    const crits = roomCriteria.map((c) => ({ name: c.name.trim(), weight: Number(c.weight) || 0 })).filter((c) => c.name);
-    if (!roomName.trim() || !roomTitle.trim() || alts.length === 0 || crits.length === 0) {
+    const alts = spaceAlternatives.map((a) => a.trim()).filter(Boolean);
+    const crits = spaceCriteria.map((c) => ({ name: c.name.trim(), weight: Number(c.weight) || 0 })).filter((c) => c.name);
+    if (!spaceName.trim() || !spaceTitle.trim() || alts.length === 0 || crits.length === 0) {
       setStatus("Please fill in all fields.");
       return;
     }
     try {
-      const res = await api("/api/rooms", {
+      const res = await api("/api/spaces", {
         method: "POST",
-        body: JSON.stringify({ name: roomName.trim(), title: roomTitle.trim(), description: roomDescription.trim(), alternatives: alts, criteria: crits }),
+        body: JSON.stringify({ name: spaceName.trim(), title: spaceTitle.trim(), description: spaceDescription.trim(), alternatives: alts, criteria: crits }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not create room.");
+        setStatus(data.detail || "Could not create space.");
         return;
       }
       setShowCreate(false);
-      setRoomName("");
-      setRoomTitle("");
-      setRoomDescription("");
-      setRoomAlternatives([""]);
-      setRoomCriteria([{ name: "", weight: 20 }]);
-      loadRooms();
-      enterRoom(data.room);
+      setSpaceName("");
+      setSpaceTitle("");
+      setSpaceDescription("");
+      setSpaceAlternatives([""]);
+      setSpaceCriteria([{ name: "", weight: 20 }]);
+      loadSpaces();
+      enterSpace(data.space);
     } catch {
-      setStatus("Network error while creating room.");
+      setStatus("Network error while creating space.");
     }
   }
 
-  async function handleJoinRoom(e) {
+  async function handleJoinSpace(e) {
     e.preventDefault();
     if (!joinCode.trim()) return;
     try {
-      const res = await api("/api/rooms/join", {
+      const res = await api("/api/spaces/join", {
         method: "POST",
         body: JSON.stringify({ code: joinCode.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not join room.");
+        setStatus(data.detail || "Could not join space.");
         return;
       }
       setJoinCode("");
-      loadRooms();
-      enterRoom(data.room);
+      loadSpaces();
+      enterSpace(data.space);
     } catch {
-      setStatus("Network error while joining room.");
+      setStatus("Network error while joining space.");
     }
   }
 
-  function enterRoom(room) {
-    setCurrentRoom(room);
+  async function fetchAwayBrief(spaceId) {
+    try {
+      const res = await api(`/api/spaces/${spaceId}/activity`);
+      if (res.ok) {
+        const data = await res.json();
+        const hasActivity = data.new_messages > 0 || data.new_members > 0 || data.new_ratings > 0;
+        if (hasActivity) {
+          setAwayBriefData(data);
+          setShowAwayBrief(true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function enterSpace(space) {
+    setCurrentSpace(space);
     setAnalysis(null);
-    setRoomTab("vote");
-    // Show brief description popup if the room has a description
-    const desc = room.description;
+    setSpaceTab("introduction");
+    const desc = space.description;
     if (desc && desc.trim()) {
       setShowBriefDescription(true);
     } else {
       setShowBriefDescription(false);
     }
-    setView("room");
-    loadRoom(room.id);
+    setView("space");
+    loadSpace(space.id);
+    fetchAwayBrief(space.id);
+    // Reset notification prev counts so we don't get flooded on re-enter
+    prevCountsRef.current = { messages: 0, members: 0, ratings: 0 };
   }
 
-  async function handleUpdateRoom(e) {
+  async function handleUpdateSpace(e) {
     e.preventDefault();
-    if (!currentRoom) return;
+    if (!currentSpace) return;
     try {
-      const res = await api(`/api/rooms/${currentRoom.id}`, {
+      const res = await api(`/api/spaces/${currentSpace.id}`, {
         method: "PUT",
-        body: JSON.stringify({ description: editRoomDescription.trim() }),
+        body: JSON.stringify({ description: editSpaceDescription.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not update room.");
+        setStatus(data.detail || "Could not update space.");
         return;
       }
-      setShowEditRoom(false);
-      setStatus("Room updated.");
-      // Refresh current room data
-      const updatedRoom = data.room;
-      setCurrentRoom((prev) => ({ ...prev, description: updatedRoom.description }));
-      setRoomData((prev) => (prev ? { ...prev, room: { ...prev.room, description: updatedRoom.description } } : prev));
+      setShowEditSpace(false);
+      setStatus("Space updated.");
+      const updatedSpace = data.space;
+      setCurrentSpace((prev) => ({ ...prev, description: updatedSpace.description }));
+      setSpaceData((prev) => (prev ? { ...prev, space: { ...prev.space, description: updatedSpace.description } } : prev));
     } catch {
-      setStatus("Network error while updating room.");
+      setStatus("Network error while updating space.");
     }
   }
 
   async function sendMessage(e) {
     e.preventDefault();
-    if (!messageDraft.trim() || !currentRoom) return;
+    if (!messageDraft.trim() || !currentSpace) return;
     try {
-      await api(`/api/rooms/${currentRoom.id}/messages`, {
+      await api(`/api/spaces/${currentSpace.id}/messages`, {
         method: "POST",
         body: JSON.stringify({ content: messageDraft.trim() }),
       });
       setMessageDraft("");
-      loadRoom(currentRoom.id);
+      loadSpace(currentSpace.id);
     } catch {
       setStatus("Failed to send message.");
     }
   }
 
   async function setWeight(criterion, value) {
-    if (!currentRoom || !user) return;
+    if (!currentSpace || !user) return;
     try {
-      await api(`/api/rooms/${currentRoom.id}/weights`, {
+      await api(`/api/spaces/${currentSpace.id}/weights`, {
         method: "POST",
         body: JSON.stringify({ criterion, value }),
       });
@@ -297,9 +349,9 @@ function App() {
   }
 
   async function setRating(alternative, criterion, value) {
-    if (!currentRoom || !user) return;
+    if (!currentSpace || !user) return;
     try {
-      await api(`/api/rooms/${currentRoom.id}/ratings`, {
+      await api(`/api/spaces/${currentSpace.id}/ratings`, {
         method: "POST",
         body: JSON.stringify({ alternative, criterion, value }),
       });
@@ -311,19 +363,20 @@ function App() {
   }
 
   async function runAnalysis() {
-    if (!currentRoom) return;
+    if (!currentSpace) return;
     setIsSubmitting(true);
     setStatus("Analyzing...");
     try {
-      const res = await api(`/api/rooms/${currentRoom.id}/analyze`, { method: "POST" });
+      const res = await api(`/api/spaces/${currentSpace.id}/analyze`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         setStatus(data.detail || "Analysis failed.");
         return;
       }
       setAnalysis(data);
-      setRoomTab("results");
+      setSpaceTab("results");
       setStatus("Analysis complete.");
+      addNotification("Analysis complete! Results are ready.", "success");
     } catch {
       setStatus("Analysis request failed.");
     } finally {
@@ -331,9 +384,9 @@ function App() {
     }
   }
 
-  const participants = roomData?.members?.map((m) => m.username) || [];
-  const alternatives = roomData?.room?.alternatives || [];
-  const criteria = roomData?.room?.criteria || [];
+  const participants = spaceData?.members?.map((m) => m.username) || [];
+  const alternatives = spaceData?.space?.alternatives || [];
+  const criteria = spaceData?.space?.criteria || [];
 
   const completion =
     participants.length && alternatives.length && criteria.length
@@ -396,8 +449,8 @@ function App() {
           <p className="subtitle">Make better group decisions, together.</p>
           <div className="intro-content" style={{ display: "grid", gap: 18 }}>
             <div className="intro-step">
-              <strong>1. Create or join a room</strong>
-              <p className="subtitle">Start a decision room and invite others with a simple code.</p>
+              <strong>1. Create or join a space</strong>
+              <p className="subtitle">Start a decision space and invite others with a simple code.</p>
             </div>
             <div className="intro-step">
               <strong>2. Vote on criteria and alternatives</strong>
@@ -408,11 +461,11 @@ function App() {
               <p className="subtitle">Our algorithm finds the fairest option and shows consensus insights.</p>
             </div>
             <div className="intro-step">
-              <strong>4. Discuss in the chat</strong>
-              <p className="subtitle">Use the chat tab to talk things through after seeing the results.</p>
+              <strong>4. Discuss in the discussion panel</strong>
+              <p className="subtitle">Use the discussion panel to talk things through after seeing the results.</p>
             </div>
           </div>
-          <button className="primary-button" onClick={() => { setView("dashboard"); loadRooms(); }} type="button">
+          <button className="primary-button" onClick={() => { setView("dashboard"); loadSpaces(); }} type="button">
             Get Started
           </button>
         </div>
@@ -431,7 +484,7 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button className="secondary-button" onClick={() => setShowCreate(true)} type="button">
-              Create Room
+              Create Space
             </button>
             <button className="secondary-button" onClick={logout} type="button">
               Logout
@@ -447,7 +500,7 @@ function App() {
 
               <div className="onboarding-steps">
                 <div className="onboarding-step">
-                  <strong>1. Create or join a room</strong>
+                  <strong>1. Create or join a space</strong>
                   <p>Set up a decision topic and invite teammates with a 6-character code.</p>
                 </div>
                 <div className="onboarding-step">
@@ -460,7 +513,7 @@ function App() {
                 </div>
                 <div className="onboarding-step">
                   <strong>4. Discuss</strong>
-                  <p>Use the chat to talk through results and next steps with your team.</p>
+                  <p>Use the discussion panel to talk through results and next steps with your team.</p>
                 </div>
               </div>
 
@@ -487,25 +540,25 @@ function App() {
         {showCreate ? (
           <div className="panel" style={{ marginBottom: 20 }}>
             <div className="section-heading">
-              <h2>Create a Voting Room</h2>
-              <p>Set up the trip decision and invite others with the room code.</p>
+              <h2>Create a Voting Space</h2>
+              <p>Set up the trip decision and invite others with the space code.</p>
             </div>
-            <form onSubmit={createRoom} className="create-room-form">
+            <form onSubmit={createSpace} className="create-room-form">
               <div className="two-columns">
                 <label className="field">
-                  <span>Room Name</span>
-                  <input value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="e.g. Summer Trip 2025" required />
+                  <span>Space Name</span>
+                  <input value={spaceName} onChange={(e) => setSpaceName(e.target.value)} placeholder="e.g. Summer Trip 2025" required />
                 </label>
                 <label className="field">
                   <span>Decision Question</span>
-                  <input value={roomTitle} onChange={(e) => setRoomTitle(e.target.value)} placeholder="e.g. Where should we travel?" required />
+                  <input value={spaceTitle} onChange={(e) => setSpaceTitle(e.target.value)} placeholder="e.g. Where should we travel?" required />
                 </label>
               </div>
               <label className="field">
                 <span>Brief Description</span>
                 <textarea
-                  value={roomDescription}
-                  onChange={(e) => setRoomDescription(e.target.value)}
+                  value={spaceDescription}
+                  onChange={(e) => setSpaceDescription(e.target.value)}
                   placeholder="e.g. We'll be voting about a trip to Egypt. The voting will include budget, food, and accommodation options."
                   rows={3}
                   maxLength={1000}
@@ -515,44 +568,44 @@ function App() {
               <div className="two-columns">
                 <div>
                   <h4>Alternatives</h4>
-                  {roomAlternatives.map((alt, idx) => (
+                  {spaceAlternatives.map((alt, idx) => (
                     <div className="inline-form" key={idx}>
                       <input value={alt} onChange={(e) => {
-                        const next = [...roomAlternatives];
+                        const next = [...spaceAlternatives];
                         next[idx] = e.target.value;
-                        setRoomAlternatives(next);
+                        setSpaceAlternatives(next);
                       }} placeholder={`Alternative ${idx + 1}`} required />
-                      {roomAlternatives.length > 1 ? (
-                        <button type="button" className="secondary-button" onClick={() => setRoomAlternatives(roomAlternatives.filter((_, i) => i !== idx))}>Remove</button>
+                      {spaceAlternatives.length > 1 ? (
+                        <button type="button" className="secondary-button" onClick={() => setSpaceAlternatives(spaceAlternatives.filter((_, i) => i !== idx))}>Remove</button>
                       ) : null}
                     </div>
                   ))}
-                  <button type="button" className="secondary-button" onClick={() => setRoomAlternatives([...roomAlternatives, ""])}>Add Alternative</button>
+                  <button type="button" className="secondary-button" onClick={() => setSpaceAlternatives([...spaceAlternatives, ""])}>Add Alternative</button>
                 </div>
                 <div>
                   <h4>Criteria</h4>
-                  {roomCriteria.map((c, idx) => (
+                  {spaceCriteria.map((c, idx) => (
                     <div className="inline-form" key={idx}>
                       <input value={c.name} onChange={(e) => {
-                        const next = [...roomCriteria];
+                        const next = [...spaceCriteria];
                         next[idx] = { ...next[idx], name: e.target.value };
-                        setRoomCriteria(next);
+                        setSpaceCriteria(next);
                       }} placeholder="Criterion name" required />
                       <input type="number" min="0" max="100" value={c.weight} onChange={(e) => {
-                        const next = [...roomCriteria];
+                        const next = [...spaceCriteria];
                         next[idx] = { ...next[idx], weight: Number(e.target.value) };
-                        setRoomCriteria(next);
+                        setSpaceCriteria(next);
                       }} style={{ width: 80 }} required />
-                      {roomCriteria.length > 1 ? (
-                        <button type="button" className="secondary-button" onClick={() => setRoomCriteria(roomCriteria.filter((_, i) => i !== idx))}>Remove</button>
+                      {spaceCriteria.length > 1 ? (
+                        <button type="button" className="secondary-button" onClick={() => setSpaceCriteria(spaceCriteria.filter((_, i) => i !== idx))}>Remove</button>
                       ) : null}
                     </div>
                   ))}
-                  <button type="button" className="secondary-button" onClick={() => setRoomCriteria([...roomCriteria, { name: "", weight: 20 }])}>Add Criterion</button>
+                  <button type="button" className="secondary-button" onClick={() => setSpaceCriteria([...spaceCriteria, { name: "", weight: 20 }])}>Add Criterion</button>
                 </div>
               </div>
               <div className="form-actions">
-                <button className="primary-button" type="submit">Create Room</button>
+                <button className="primary-button" type="submit">Create Space</button>
                 <button className="secondary-button" type="button" onClick={() => setShowCreate(false)}>Cancel</button>
               </div>
             </form>
@@ -561,28 +614,28 @@ function App() {
 
         <div className="panel" style={{ marginBottom: 20 }}>
           <div className="section-heading">
-            <h2>Join a Room</h2>
+            <h2>Join a Space</h2>
             <p>Enter the 6-character invite code.</p>
           </div>
-          <form className="inline-form" onSubmit={handleJoinRoom}>
-            <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="ROOM CODE" maxLength={20} style={{ textTransform: "uppercase" }} />
+          <form className="inline-form" onSubmit={handleJoinSpace}>
+            <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="SPACE CODE" maxLength={20} style={{ textTransform: "uppercase" }} />
             <button className="primary-button" type="submit">Join</button>
           </form>
         </div>
 
         <div className="panel">
           <div className="section-heading">
-            <h2>Your Rooms</h2>
+            <h2>Your Spaces</h2>
           </div>
-          {rooms.length === 0 ? (
-            <p className="subtitle">No rooms yet. Create one or join with a code.</p>
+          {spaces.length === 0 ? (
+            <p className="subtitle">No spaces yet. Create one or join with a code.</p>
           ) : (
-            <div className="room-grid">
-              {rooms.map((room) => (
-                <div className="room-card" key={room.id} onClick={() => enterRoom(room)}>
-                  <h3>{room.name}</h3>
-                  <p>{room.title}</p>
-                  <span className="room-code">{room.code}</span>
+            <div className="space-grid">
+              {spaces.map((space) => (
+                <div className="space-card" key={space.id} onClick={() => enterSpace(space)}>
+                  <h3>{space.name}</h3>
+                  <p>{space.title}</p>
+                  <span className="space-code">{space.code}</span>
                 </div>
               ))}
             </div>
@@ -594,20 +647,57 @@ function App() {
     );
   }
 
-  // Room view
-  const roomDesc = roomData?.room?.description || currentRoom?.description || "";
+  // Space view
+  const spaceDesc = spaceData?.space?.description || currentSpace?.description || "";
 
   return (
     <div className="app-shell">
+      {/* Notifications */}
+      <div className="notification-container">
+        {notifications.map((n) => (
+          <div key={n.id} className={`notification-toast ${n.type}`}>
+            <span>{n.message}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Away Brief Popup */}
+      {showAwayBrief && awayBriefData ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card brief-desc-modal">
+            <div className="brief-desc-icon">🔔</div>
+            <h2>While you were away</h2>
+            <p className="subtitle">{currentSpace?.name}</p>
+            <ul className="away-brief-list">
+              {awayBriefData.new_messages > 0 ? (
+                <li>📨 {awayBriefData.new_messages} new message{awayBriefData.new_messages > 1 ? "s" : ""}</li>
+              ) : null}
+              {awayBriefData.new_members > 0 ? (
+                <li>👤 {awayBriefData.new_members} new member{awayBriefData.new_members > 1 ? "s" : ""} joined</li>
+              ) : null}
+              {awayBriefData.new_ratings > 0 ? (
+                <li>⭐ {awayBriefData.new_ratings} new rating{awayBriefData.new_ratings > 1 ? "s" : ""} submitted</li>
+              ) : null}
+              {awayBriefData.new_messages === 0 && awayBriefData.new_members === 0 && awayBriefData.new_ratings === 0 ? (
+                <li>Nothing new since your last visit.</li>
+              ) : null}
+            </ul>
+            <button className="primary-button" onClick={() => setShowAwayBrief(false)} type="button">
+              Got it
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Brief Description Popup */}
-      {showBriefDescription && roomDesc.trim() ? (
+      {showBriefDescription && spaceDesc.trim() ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card brief-desc-modal">
             <div className="brief-desc-icon">📋</div>
             <h2>Brief Description</h2>
-            <p className="subtitle">{currentRoom?.name}</p>
+            <p className="subtitle">{currentSpace?.name}</p>
             <div className="brief-desc-content">
-              <p>{roomDesc}</p>
+              <p>{spaceDesc}</p>
             </div>
             <button className="primary-button" onClick={() => setShowBriefDescription(false)} type="button">
               Click to Continue
@@ -616,18 +706,18 @@ function App() {
         </div>
       ) : null}
 
-      {/* Edit Room Modal */}
-      {showEditRoom && currentRoom?.creator_id === user?.id ? (
+      {/* Edit Space Modal */}
+      {showEditSpace && currentSpace?.creator_id === user?.id ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
-            <h2>Edit Room</h2>
-            <p className="subtitle">Update the brief description for {currentRoom?.name}.</p>
-            <form onSubmit={handleUpdateRoom} className="create-room-form" style={{ gap: 18 }}>
+            <h2>Edit Space</h2>
+            <p className="subtitle">Update the brief description for {currentSpace?.name}.</p>
+            <form onSubmit={handleUpdateSpace} className="create-room-form" style={{ gap: 18 }}>
               <label className="field">
                 <span>Brief Description</span>
                 <textarea
-                  value={editRoomDescription}
-                  onChange={(e) => setEditRoomDescription(e.target.value)}
+                  value={editSpaceDescription}
+                  onChange={(e) => setEditSpaceDescription(e.target.value)}
                   placeholder="e.g. We'll be voting about a trip to Egypt..."
                   rows={4}
                   maxLength={1000}
@@ -636,7 +726,7 @@ function App() {
               </label>
               <div className="form-actions">
                 <button className="primary-button" type="submit">Save Changes</button>
-                <button className="secondary-button" type="button" onClick={() => setShowEditRoom(false)}>Cancel</button>
+                <button className="secondary-button" type="button" onClick={() => setShowEditSpace(false)}>Cancel</button>
               </div>
             </form>
           </div>
@@ -645,24 +735,24 @@ function App() {
 
       <header className="topbar">
         <div>
-          <p className="eyebrow">Room {currentRoom?.code}</p>
-          <h1>{currentRoom?.name}</h1>
-          <p className="subtitle">{currentRoom?.title}</p>
+          <p className="eyebrow">Space {currentSpace?.code}</p>
+          <h1>{currentSpace?.name}</h1>
+          <p className="subtitle">{currentSpace?.title}</p>
         </div>
         <div className="topbar-actions">
-          {currentRoom?.creator_id === user?.id ? (
+          {currentSpace?.creator_id === user?.id ? (
             <button
               className="secondary-button"
               onClick={() => {
-                setEditRoomDescription(roomDesc);
-                setShowEditRoom(true);
+                setEditSpaceDescription(spaceDesc);
+                setShowEditSpace(true);
               }}
               type="button"
             >
-              ✏️ Edit Room
+              ✏️ Edit Space
             </button>
           ) : null}
-          <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentRoom(null); }} type="button">
+          <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentSpace(null); }} type="button">
             Back to Dashboard
           </button>
           <button className="secondary-button" onClick={logout} type="button">
@@ -673,12 +763,12 @@ function App() {
 
       <main className="layout">
         <section className="workspace">
-          <nav className="stepper" aria-label="Room tabs">
-            {["Vote", "Results"].map((label) => (
+          <nav className="stepper" aria-label="Space tabs">
+            {["Introduction", "Vote", "Results", "Consensus Phase"].map((label) => (
               <button
                 key={label}
-                className={`step-chip ${roomTab === label.toLowerCase() ? "is-active" : ""}`}
-                onClick={() => setRoomTab(label.toLowerCase())}
+                className={`step-chip ${spaceTab === label.toLowerCase().replace(" phase", "") ? "is-active" : ""}`}
+                onClick={() => setSpaceTab(label.toLowerCase().replace(" phase", ""))}
                 type="button"
               >
                 {label}
@@ -686,7 +776,54 @@ function App() {
             ))}
           </nav>
 
-          {roomTab === "vote" ? (
+          {spaceTab === "introduction" ? (
+            <div className="panel">
+              <div className="section-heading">
+                <h2>Introduction</h2>
+                <p>Overview of the decision space before you start voting.</p>
+              </div>
+              <div className="intro-panel">
+                {spaceDesc.trim() ? (
+                  <div className="intro-card">
+                    <h4>Description</h4>
+                    <p>{spaceDesc}</p>
+                  </div>
+                ) : null}
+                <div className="intro-card">
+                  <h4>Decision Question</h4>
+                  <p>{currentSpace?.title || "No question set."}</p>
+                </div>
+                <div className="intro-card">
+                  <h4>Alternatives</h4>
+                  <ul>
+                    {alternatives.length === 0 ? <li>No alternatives configured.</li> : alternatives.map((alt) => <li key={alt}>{alt}</li>)}
+                  </ul>
+                </div>
+                <div className="intro-card">
+                  <h4>Criteria</h4>
+                  <ul>
+                    {criteria.length === 0 ? <li>No criteria configured.</li> : criteria.map((c) => <li key={c.name}>{c.name} <span style={{ color: "var(--muted)" }}>(default weight: {c.weight}%)</span></li>)}
+                  </ul>
+                </div>
+                <div className="intro-card">
+                  <h4>Members</h4>
+                  <p>{participants.join(", ") || "No members yet."}</p>
+                </div>
+                <div className="intro-card">
+                  <h4>How it works</h4>
+                  <p>
+                    1. Review the alternatives and criteria above.<br />
+                    2. In the <strong>Vote</strong> tab, set your personal weights and rate each alternative on every criterion using a 1–5 scale.<br />
+                    3. Once everyone has voted, run the analysis in the <strong>Vote</strong> tab.<br />
+                    4. Check the <strong>Results</strong> tab for the group recommendation and consensus status.<br />
+                    5. Use the <strong>Consensus Phase</strong> tab to discuss and refine your ratings if needed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {spaceTab === "vote" ? (
             <div className="panel">
               <div className="section-heading">
                 <h2>Vote</h2>
@@ -694,7 +831,7 @@ function App() {
               </div>
 
               {alternatives.length === 0 || criteria.length === 0 ? (
-                <p className="subtitle">This room has no alternatives or criteria configured yet.</p>
+                <p className="subtitle">This space has no alternatives or criteria configured yet.</p>
               ) : (
                 <>
                   <div className="vote-progress">
@@ -710,7 +847,7 @@ function App() {
                         <span>{user?.username}</span>
                       </div>
                       <p className="subtitle" style={{ marginBottom: 12 }}>
-                        How important is each criterion to you? (1 = low, 9 = high)
+                        How important is each criterion to you? (1 = low, 5 = high)
                       </p>
                       <div className="rating-grid">
                         {criteria.map((criterion) => (
@@ -719,7 +856,7 @@ function App() {
                               <strong>{criterion.name}</strong>
                             </div>
                             <div className="score-picker">
-                              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((score) => {
+                              {[1, 2, 3, 4, 5].map((score) => {
                                 const selected = weightsMap[criterion.name] === score;
                                 return (
                                   <button
@@ -752,7 +889,7 @@ function App() {
                                 <p>{criterion.weight}% default weight</p>
                               </div>
                               <div className="score-picker">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((score) => {
+                                {[1, 2, 3, 4, 5].map((score) => {
                                   const selected =
                                     ratingsMap[ratingKey(user?.username, alternative, criterion.name)] === score;
                                   return (
@@ -781,7 +918,7 @@ function App() {
             </div>
           ) : null}
 
-          {roomTab === "results" ? (
+          {spaceTab === "results" ? (
             <div className="panel">
               <div className="section-heading">
                 <h2>Results</h2>
@@ -859,7 +996,125 @@ function App() {
               ) : (
                 <div className="empty-state">
                   <p>Run the analysis from the Vote tab to see results here.</p>
-                  <button className="primary-button" onClick={() => setRoomTab("vote")} type="button">
+                  <button className="primary-button" onClick={() => setSpaceTab("vote")} type="button">
+                    Go to Vote
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {spaceTab === "consensus" ? (
+            <div className="panel">
+              <div className="section-heading">
+                <h2>Consensus Phase</h2>
+                <p>Review the consensus status, discuss, and adjust your ratings to align the group.</p>
+              </div>
+              {analysis ? (
+                <div className="consensus-panel">
+                  {analysis.consensusReached ? (
+                    <div className="consensus-ok-card">
+                      <h4>✅ Consensus Reached</h4>
+                      <p>The group is well-aligned. Entropy: {analysis.entropy?.toFixed(4)}.</p>
+                    </div>
+                  ) : (
+                    <div className="deviator-card">
+                      <h4>⚠️ Consensus Not Reached</h4>
+                      <p>Top deviator: <strong>{analysis.topDeviator || "Unknown"}</strong>. Entropy: {analysis.entropy?.toFixed(4)}.</p>
+                      <p style={{ marginTop: 8 }}>Consider discussing the differences and adjusting your ratings to improve alignment.</p>
+                    </div>
+                  )}
+
+                  <div className="intro-card">
+                    <h4>Moderation Steps</h4>
+                    <ul className="clean-list">
+                      {analysis.consensusSteps.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="intro-card">
+                    <h4>Quick Re-vote</h4>
+                    <p className="subtitle" style={{ marginBottom: 12 }}>
+                      Adjust your ratings below to help the group reach consensus.
+                    </p>
+                    <div className="rating-stack">
+                      <article className="rating-block">
+                        <div className="rating-block-header">
+                          <h3>Your Criteria Weights</h3>
+                          <span>{user?.username}</span>
+                        </div>
+                        <div className="rating-grid">
+                          {criteria.map((criterion) => (
+                            <div className="rating-row" key={`consensus-weight-${criterion.name}`}>
+                              <div>
+                                <strong>{criterion.name}</strong>
+                              </div>
+                              <div className="score-picker">
+                                {[1, 2, 3, 4, 5].map((score) => {
+                                  const selected = weightsMap[criterion.name] === score;
+                                  return (
+                                    <button
+                                      key={score}
+                                      className={`score-button ${selected ? "is-selected" : ""}`}
+                                      onClick={() => setWeight(criterion.name, score)}
+                                      type="button"
+                                    >
+                                      {score}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+
+                      {alternatives.map((alternative) => (
+                        <article className="rating-block" key={`consensus-${alternative}`}>
+                          <div className="rating-block-header">
+                            <h3>{alternative}</h3>
+                            <span>{user?.username}</span>
+                          </div>
+                          <div className="rating-grid">
+                            {criteria.map((criterion) => (
+                              <div className="rating-row" key={`consensus-${alternative}-${criterion.name}`}>
+                                <div>
+                                  <strong>{criterion.name}</strong>
+                                  <p>{criterion.weight}% default weight</p>
+                                </div>
+                                <div className="score-picker">
+                                  {[1, 2, 3, 4, 5].map((score) => {
+                                    const selected =
+                                      ratingsMap[ratingKey(user?.username, alternative, criterion.name)] === score;
+                                    return (
+                                      <button
+                                        key={score}
+                                        className={`score-button ${selected ? "is-selected" : ""}`}
+                                        onClick={() => setRating(alternative, criterion.name, score)}
+                                        type="button"
+                                      >
+                                        {score}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <button className="primary-button" onClick={runAnalysis} type="button" disabled={isSubmitting} style={{ marginTop: 16 }}>
+                      {isSubmitting ? "Analyzing..." : "Re-run Analysis"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <p>No analysis available yet. Run the analysis from the Vote tab first.</p>
+                  <button className="primary-button" onClick={() => setSpaceTab("vote")} type="button">
                     Go to Vote
                   </button>
                 </div>
@@ -870,7 +1125,7 @@ function App() {
         </section>
 
         <aside className="sidebar">
-          {roomDesc.trim() ? (
+          {spaceDesc.trim() ? (
             <section className="sidebar-panel">
               <button
                 className="brief-desc-button"
@@ -882,30 +1137,30 @@ function App() {
               </button>
             </section>
           ) : null}
-          <section className="sidebar-panel chat-sidebar-panel">
+          <section className="sidebar-panel discussion-sidebar-panel">
             <div className="section-heading">
               <h3>Discussion</h3>
             </div>
-            <div className="chat-messages sidebar-chat-messages">
+            <div className="discussion-messages sidebar-discussion-messages">
               {messages.map((msg) => (
-                <div className={`chat-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
-                  <span className="chat-author">{msg.author}</span>
-                  <span className="chat-content">{msg.content}</span>
-                  <span className="chat-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                <div className={`discussion-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
+                  <span className="discussion-author">{msg.author}</span>
+                  <span className="discussion-content">{msg.content}</span>
+                  <span className="discussion-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
-            <form className="inline-form chat-form" onSubmit={sendMessage}>
+            <form className="inline-form discussion-form" onSubmit={sendMessage}>
               <input value={messageDraft} onChange={(e) => setMessageDraft(e.target.value)} placeholder="Type a message..." />
               <button className="primary-button" type="submit">Send</button>
             </form>
           </section>
 
           <section className="sidebar-panel">
-            <p className="eyebrow">Room Info</p>
-            <h3>{currentRoom?.name}</h3>
-            <p className="subtitle">Code: <strong>{currentRoom?.code}</strong></p>
+            <p className="eyebrow">Space Info</p>
+            <h3>{currentSpace?.name}</h3>
+            <p className="subtitle">Code: <strong>{currentSpace?.code}</strong></p>
             <p className="subtitle">Share this code to invite others.</p>
           </section>
 

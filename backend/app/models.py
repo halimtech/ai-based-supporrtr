@@ -12,7 +12,7 @@ class RatingInput(BaseModel):
     participant: str = Field(..., min_length=1, max_length=80)
     alternative: str = Field(..., min_length=1, max_length=80)
     criterion: str = Field(..., min_length=1, max_length=80)
-    value: int = Field(..., ge=1, le=9)
+    value: int = Field(..., ge=1, le=5)
 
 
 class DecisionRequest(BaseModel):
@@ -52,12 +52,12 @@ class SendMessageRequest(BaseModel):
 class SaveRatingRequest(BaseModel):
     alternative: str = Field(..., min_length=1, max_length=80)
     criterion: str = Field(..., min_length=1, max_length=80)
-    value: int = Field(..., ge=1, le=9)
+    value: int = Field(..., ge=1, le=5)
 
 
 class SaveWeightRequest(BaseModel):
     criterion: str = Field(..., min_length=1, max_length=80)
-    value: int = Field(..., ge=1, le=9)
+    value: int = Field(..., ge=1, le=5)
 
 
 class UpdateRoomRequest(BaseModel):

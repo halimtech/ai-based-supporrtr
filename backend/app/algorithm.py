@@ -72,8 +72,8 @@ def coerce_ratings_lookup(
         lookup: dict[str, float] = {}
         for key, value in ratings.items():
             numeric_value = float(value)
-            if numeric_value < 1 or numeric_value > 9:
-                raise ValueError(f"rating value must stay between 1 and 9: {key}")
+            if numeric_value < 1 or numeric_value > 5:
+                raise ValueError(f"rating value must stay between 1 and 5: {key}")
             lookup[str(key)] = numeric_value
         return lookup
 
@@ -83,9 +83,9 @@ def coerce_ratings_lookup(
         alternative = _clean_label(rating.get("alternative", ""), "alternative")
         criterion = _clean_label(rating.get("criterion", ""), "criterion")
         value = float(rating.get("value", 0))
-        if value < 1 or value > 9:
+        if value < 1 or value > 5:
             raise ValueError(
-                f"rating value must stay between 1 and 9: {participant} / {alternative} / {criterion}"
+                f"rating value must stay between 1 and 5: {participant} / {alternative} / {criterion}"
             )
         key = f"{participant}__{alternative}__{criterion}"
         if key in lookup:

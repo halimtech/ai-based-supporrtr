@@ -174,6 +174,22 @@ def init_db():
         cursor2.close()
         conn2.close()
 
+    # Migration: add last_seen column to room_members if not present
+    conn3 = get_db()
+    if IS_POSTGRES:
+        conn3.autocommit = True
+    cursor3 = _cursor(conn3)
+    try:
+        cursor3.execute("ALTER TABLE room_members ADD COLUMN last_seen TEXT NOT NULL DEFAULT ''")
+        if not IS_POSTGRES:
+            conn3.commit()
+    except Exception:
+        if not IS_POSTGRES:
+            conn3.rollback()
+    finally:
+        cursor3.close()
+        conn3.close()
+
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
@@ -542,3 +558,70 @@ def is_room_member(room_id: int, user_id: int) -> bool:
     cursor.close()
     conn.close()
     return row is not None
+
+
+def update_member_last_seen(room_id: int, user_id: int):
+    conn = get_db()
+    cursor = _cursor(conn)
+    ph = _ph()
+    cursor.execute(
+        f"UPDATE room_members SET last_seen = {ph} WHERE room_id = {ph} AND user_id = {ph}",
+        (now_iso(), room_id, user_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_space_activity(room_id: int, user_id: int) -> dict:
+    conn = get_db()
+    cursor = _cursor(conn)
+    ph = _ph()
+
+    # Get user's last_seen for this room
+    cursor.execute(
+        f"SELECT last_seen FROM room_members WHERE room_id = {ph} AND user_id = {ph}",
+        (room_id, user_id),
+    )
+    row = cursor.fetchone()
+    last_seen = row["last_seen"] if row and row.get("last_seen") else "1970-01-01T00:00:00"
+
+    # New messages since last_seen
+    cursor.execute(
+        f"""
+        SELECT COUNT(*) as cnt FROM messages m
+        WHERE m.room_id = {ph} AND m.created_at > {ph}
+        """,
+        (room_id, last_seen),
+    )
+    new_messages = cursor.fetchone()["cnt"]
+
+    # New members since last_seen
+    cursor.execute(
+        f"""
+        SELECT COUNT(*) as cnt FROM room_members rm
+        WHERE rm.room_id = {ph} AND rm.joined_at > {ph}
+        """,
+        (room_id, last_seen),
+    )
+    new_members = cursor.fetchone()["cnt"]
+
+    # New ratings since last_seen
+    cursor.execute(
+        f"""
+        SELECT COUNT(*) as cnt FROM ratings r
+        WHERE r.room_id = {ph} AND r.created_at > {ph}
+        """,
+        (room_id, last_seen),
+    )
+    new_ratings = cursor.fetchone()["cnt"]
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "last_seen": last_seen,
+        "new_messages": new_messages,
+        "new_members": new_members,
+        "new_ratings": new_ratings,
+    }
