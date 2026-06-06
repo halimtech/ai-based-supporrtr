@@ -944,3 +944,44 @@ button {
   }
 }
 
+.welcome-banner {
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(217, 119, 6, 0.08));
+  border: 1px solid var(--line);
+}
+
+.welcome-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.status-card .status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.status-card .status-grid div {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+}
+
+.status-card .status-grid span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status-card .status-grid strong {
+  font-size: 1.3rem;
+  color: var(--text);
+}
+

@@ -73,7 +73,7 @@ def create_space(payload: CreateRoomRequest, user: dict = Depends(get_current_us
     alternatives = payload.alternatives
     space = db.create_room(payload.name, payload.title, user["id"], criteria, alternatives, description=payload.description)
     if not space:
-        raise HTTPException(status_code=500, detail="Could not create space")
+        raise HTTPException(status_code=500, detail="Could not create voting space")
     return {"space": space}
 
 
@@ -81,7 +81,7 @@ def create_space(payload: CreateRoomRequest, user: dict = Depends(get_current_us
 def join_space(payload: JoinRoomRequest, user: dict = Depends(get_current_user)):
     space = db.get_room_by_code(payload.code.upper())
     if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+        raise HTTPException(status_code=404, detail="Voting space not found")
     db.join_room(space["id"], user["id"])
     return {"space": space}
 
@@ -95,10 +95,10 @@ def list_spaces(user: dict = Depends(get_current_user)):
 @app.get("/api/spaces/{space_id}")
 def get_space(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     space = db.get_room_by_id(space_id)
     if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+        raise HTTPException(status_code=404, detail="Voting space not found")
     members = db.get_room_members(space_id)
     messages = db.get_messages(space_id)
     ratings = db.get_ratings(space_id)
@@ -109,12 +109,12 @@ def get_space(space_id: int, user: dict = Depends(get_current_user)):
 @app.put("/api/spaces/{space_id}")
 def update_space(space_id: int, payload: UpdateRoomRequest, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     space = db.get_room_by_id(space_id)
     if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+        raise HTTPException(status_code=404, detail="Voting space not found")
     if space["creator_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Only the space creator can edit the space")
+        raise HTTPException(status_code=403, detail="Only the voting space creator can edit the voting space")
     db.update_room_description(space_id, payload.description)
     updated = db.get_room_by_id(space_id)
     return {"space": updated}
@@ -123,7 +123,7 @@ def update_space(space_id: int, payload: UpdateRoomRequest, user: dict = Depends
 @app.post("/api/spaces/{space_id}/messages")
 def send_message(space_id: int, payload: SendMessageRequest, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     msg_id = db.add_message(space_id, user["id"], payload.content)
     return {"id": msg_id, "content": payload.content, "author": user["username"], "created_at": db.now_iso()}
 
@@ -131,7 +131,7 @@ def send_message(space_id: int, payload: SendMessageRequest, user: dict = Depend
 @app.get("/api/spaces/{space_id}/messages")
 def get_space_messages(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     messages = db.get_messages(space_id)
     return {"messages": messages}
 
@@ -139,7 +139,7 @@ def get_space_messages(space_id: int, user: dict = Depends(get_current_user)):
 @app.post("/api/spaces/{space_id}/ratings")
 def save_rating(space_id: int, payload: SaveRatingRequest, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     if payload.value < 1 or payload.value > 5:
         raise HTTPException(status_code=422, detail="Rating value must be between 1 and 5")
     db.save_rating(space_id, user["id"], payload.alternative, payload.criterion, payload.value)
@@ -149,7 +149,7 @@ def save_rating(space_id: int, payload: SaveRatingRequest, user: dict = Depends(
 @app.get("/api/spaces/{space_id}/ratings")
 def get_space_ratings(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     ratings = db.get_ratings(space_id)
     return {"ratings": ratings}
 
@@ -157,7 +157,7 @@ def get_space_ratings(space_id: int, user: dict = Depends(get_current_user)):
 @app.post("/api/spaces/{space_id}/weights")
 def save_weight(space_id: int, payload: SaveWeightRequest, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     if payload.value < 1 or payload.value > 5:
         raise HTTPException(status_code=422, detail="Weight value must be between 1 and 5")
     db.save_weight(space_id, user["id"], payload.criterion, payload.value)
@@ -167,7 +167,7 @@ def save_weight(space_id: int, payload: SaveWeightRequest, user: dict = Depends(
 @app.get("/api/spaces/{space_id}/weights")
 def get_space_weights(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     weights = db.get_weights(space_id)
     return {"weights": weights}
 
@@ -175,10 +175,10 @@ def get_space_weights(space_id: int, user: dict = Depends(get_current_user)):
 @app.post("/api/spaces/{space_id}/analyze")
 def analyze_space(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     space = db.get_room_by_id(space_id)
     if not space:
-        raise HTTPException(status_code=404, detail="Space not found")
+        raise HTTPException(status_code=404, detail="Voting space not found")
     members = db.get_room_members(space_id)
     ratings = db.get_ratings(space_id)
     weights = db.get_weights(space_id)
@@ -219,7 +219,7 @@ def analyze_space(space_id: int, user: dict = Depends(get_current_user)):
 @app.post("/api/spaces/{space_id}/ping")
 def ping_space(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     db.update_member_last_seen(space_id, user["id"])
     return {"status": "ok"}
 
@@ -227,7 +227,7 @@ def ping_space(space_id: int, user: dict = Depends(get_current_user)):
 @app.get("/api/spaces/{space_id}/activity")
 def space_activity(space_id: int, user: dict = Depends(get_current_user)):
     if not db.is_room_member(space_id, user["id"]):
-        raise HTTPException(status_code=403, detail="You are not a member of this space")
+        raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     activity = db.get_space_activity(space_id, user["id"])
     db.update_member_last_seen(space_id, user["id"])
     return activity

@@ -120,7 +120,7 @@ function App() {
       const data = await res.json();
       setSpaces(data.spaces || []);
     } catch {
-      setStatus("Could not load spaces.");
+      setStatus("Could not load voting spaces.");
     }
   }
 
@@ -153,14 +153,14 @@ function App() {
         }
       }
       if (prev.members > 0 && newMembers > prev.members) {
-        addNotification("A new member joined the space", "success");
+        addNotification("A new member joined the voting space", "success");
       }
       if (prev.ratings > 0 && newRatingsCount > prev.ratings) {
         addNotification("New ratings were submitted", "info");
       }
       prevCountsRef.current = { messages: newMessages.length, members: newMembers, ratings: newRatingsCount };
     } catch {
-      setStatus("Could not load space.");
+      setStatus("Could not load voting space.");
     }
   }
 
@@ -226,7 +226,7 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not create space.");
+        setStatus(data.detail || "Could not create voting space.");
         return;
       }
       setShowCreate(false);
@@ -238,7 +238,7 @@ function App() {
       loadSpaces();
       enterSpace(data.space);
     } catch {
-      setStatus("Network error while creating space.");
+      setStatus("Network error while creating voting space.");
     }
   }
 
@@ -252,14 +252,14 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not join space.");
+        setStatus(data.detail || "Could not join voting space.");
         return;
       }
       setJoinCode("");
       loadSpaces();
       enterSpace(data.space);
     } catch {
-      setStatus("Network error while joining space.");
+      setStatus("Network error while joining voting space.");
     }
   }
 
@@ -306,7 +306,7 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(data.detail || "Could not update space.");
+        setStatus(data.detail || "Could not update voting space.");
         return;
       }
       setShowEditSpace(false);
@@ -315,7 +315,7 @@ function App() {
       setCurrentSpace((prev) => ({ ...prev, description: updatedSpace.description }));
       setSpaceData((prev) => (prev ? { ...prev, space: { ...prev.space, description: updatedSpace.description } } : prev));
     } catch {
-      setStatus("Network error while updating space.");
+      setStatus("Network error while updating voting space.");
     }
   }
 
@@ -449,8 +449,8 @@ function App() {
           <p className="subtitle">Make better group decisions, together.</p>
           <div className="intro-content" style={{ display: "grid", gap: 18 }}>
             <div className="intro-step">
-              <strong>1. Create or join a space</strong>
-              <p className="subtitle">Start a decision space and invite others with a simple code.</p>
+              <strong>1. Create or join a voting space</strong>
+              <p className="subtitle">Start a voting space and invite others with a simple code.</p>
             </div>
             <div className="intro-step">
               <strong>2. Vote on criteria and alternatives</strong>
@@ -484,7 +484,7 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button className="secondary-button" onClick={() => setShowCreate(true)} type="button">
-              Create Space
+              Create Voting Space
             </button>
             <button className="secondary-button" onClick={logout} type="button">
               Logout
@@ -500,7 +500,7 @@ function App() {
 
               <div className="onboarding-steps">
                 <div className="onboarding-step">
-                  <strong>1. Create or join a space</strong>
+                  <strong>1. Create or join a voting space</strong>
                   <p>Set up a decision topic and invite teammates with a 6-character code.</p>
                 </div>
                 <div className="onboarding-step">
@@ -541,12 +541,12 @@ function App() {
           <div className="panel" style={{ marginBottom: 20 }}>
             <div className="section-heading">
               <h2>Create a Voting Space</h2>
-              <p>Set up the trip decision and invite others with the space code.</p>
+              <p>Set up the trip decision and invite others with the voting space code.</p>
             </div>
             <form onSubmit={createSpace} className="create-room-form">
               <div className="two-columns">
                 <label className="field">
-                  <span>Space Name</span>
+                  <span>Voting Space Name</span>
                   <input value={spaceName} onChange={(e) => setSpaceName(e.target.value)} placeholder="e.g. Summer Trip 2025" required />
                 </label>
                 <label className="field">
@@ -614,21 +614,21 @@ function App() {
 
         <div className="panel" style={{ marginBottom: 20 }}>
           <div className="section-heading">
-            <h2>Join a Space</h2>
+            <h2>Join a Voting Space</h2>
             <p>Enter the 6-character invite code.</p>
           </div>
           <form className="inline-form" onSubmit={handleJoinSpace}>
-            <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="SPACE CODE" maxLength={20} style={{ textTransform: "uppercase" }} />
+            <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="VOTING SPACE CODE" maxLength={20} style={{ textTransform: "uppercase" }} />
             <button className="primary-button" type="submit">Join</button>
           </form>
         </div>
 
         <div className="panel">
           <div className="section-heading">
-            <h2>Your Spaces</h2>
+            <h2>Your Voting Spaces</h2>
           </div>
           {spaces.length === 0 ? (
-            <p className="subtitle">No spaces yet. Create one or join with a code.</p>
+            <p className="subtitle">No voting spaces yet. Create one or join with a code.</p>
           ) : (
             <div className="space-grid">
               {spaces.map((space) => (
@@ -710,7 +710,7 @@ function App() {
       {showEditSpace && currentSpace?.creator_id === user?.id ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
-            <h2>Edit Space</h2>
+            <h2>Edit Voting Space</h2>
             <p className="subtitle">Update the brief description for {currentSpace?.name}.</p>
             <form onSubmit={handleUpdateSpace} className="create-room-form" style={{ gap: 18 }}>
               <label className="field">
@@ -735,7 +735,7 @@ function App() {
 
       <header className="topbar">
         <div>
-          <p className="eyebrow">Space {currentSpace?.code}</p>
+          <p className="eyebrow">Voting Space {currentSpace?.code}</p>
           <h1>{currentSpace?.name}</h1>
           <p className="subtitle">{currentSpace?.title}</p>
         </div>
@@ -749,7 +749,7 @@ function App() {
               }}
               type="button"
             >
-              ✏️ Edit Space
+              ✏️ Edit Voting Space
             </button>
           ) : null}
           <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentSpace(null); }} type="button">
@@ -780,7 +780,12 @@ function App() {
             <div className="panel">
               <div className="section-heading">
                 <h2>Introduction</h2>
-                <p>Overview of the decision space before you start voting.</p>
+                <p>Overview of the voting space before you start voting.</p>
+              </div>
+              <div className="welcome-banner">
+                <p className="welcome-text">
+                  Hello! You are here to decide on the trip — <strong>{currentSpace?.title}</strong>. Here are your options and the criteria we will use to evaluate them.
+                </p>
               </div>
               <div className="intro-panel">
                 {spaceDesc.trim() ? (
@@ -789,6 +794,27 @@ function App() {
                     <p>{spaceDesc}</p>
                   </div>
                 ) : null}
+                <div className="intro-card status-card">
+                  <h4>What's Happening in This Voting Space</h4>
+                  <div className="status-grid">
+                    <div>
+                      <span>Members</span>
+                      <strong>{participants.length}</strong>
+                    </div>
+                    <div>
+                      <span>Options</span>
+                      <strong>{alternatives.length}</strong>
+                    </div>
+                    <div>
+                      <span>Criteria</span>
+                      <strong>{criteria.length}</strong>
+                    </div>
+                    <div>
+                      <span>Voting Progress</span>
+                      <strong>{completion}%</strong>
+                    </div>
+                  </div>
+                </div>
                 <div className="intro-card">
                   <h4>Decision Question</h4>
                   <p>{currentSpace?.title || "No question set."}</p>
@@ -831,7 +857,7 @@ function App() {
               </div>
 
               {alternatives.length === 0 || criteria.length === 0 ? (
-                <p className="subtitle">This space has no alternatives or criteria configured yet.</p>
+                <p className="subtitle">This voting space has no alternatives or criteria configured yet.</p>
               ) : (
                 <>
                   <div className="vote-progress">
@@ -1158,7 +1184,7 @@ function App() {
           </section>
 
           <section className="sidebar-panel">
-            <p className="eyebrow">Space Info</p>
+            <p className="eyebrow">Voting Space Info</p>
             <h3>{currentSpace?.name}</h3>
             <p className="subtitle">Code: <strong>{currentSpace?.code}</strong></p>
             <p className="subtitle">Share this code to invite others.</p>
