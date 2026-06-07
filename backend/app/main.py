@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .algorithm import analyze_decision
-from .models import DecisionRequest, RegisterRequest, LoginRequest, CreateRoomRequest, JoinRoomRequest, SendMessageRequest, SaveRatingRequest, SaveWeightRequest, UpdateRoomRequest
+from .models import DecisionRequest, RegisterRequest, LoginRequest, CreateRoomRequest, JoinRoomRequest, SendMessageRequest, SaveRatingRequest, SaveWeightRequest, UpdateRoomRequest, UpdateUserRequest
 from .sample_data import SAMPLE_SESSION
 from . import db
 
@@ -65,6 +65,13 @@ def login(payload: LoginRequest):
 @app.get("/api/me")
 def me(user: dict = Depends(get_current_user)):
     return {"id": user["id"], "username": user["username"], "name": user.get("name") or user["username"]}
+
+
+@app.put("/api/me")
+def update_me(payload: UpdateUserRequest, user: dict = Depends(get_current_user)):
+    db.update_user_name(user["id"], payload.name)
+    updated = db.get_user_by_token(user["token"])
+    return {"id": updated["id"], "username": updated["username"], "name": updated.get("name") or updated["username"]}
 
 
 @app.post("/api/spaces")

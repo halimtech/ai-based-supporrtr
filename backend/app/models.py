@@ -63,3 +63,7 @@ class SaveWeightRequest(BaseModel):
 
 class UpdateRoomRequest(BaseModel):
     description: str = Field("", max_length=1000)
+
+
+class UpdateUserRequest(BaseModel):
+    name: str = Field("", max_length=80)

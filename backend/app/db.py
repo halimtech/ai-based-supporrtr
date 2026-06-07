@@ -285,6 +285,21 @@ def get_user_by_username(username: str):
     return dict(row) if row else None
 
 
+def update_user_name(user_id: int, name: str):
+    conn = get_db()
+    cursor = _cursor(conn)
+    ph = _ph()
+    display_name = name.strip() if name and name.strip() else None
+    cursor.execute(
+        f"UPDATE users SET name = {ph} WHERE id = {ph}",
+        (display_name, user_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return True
+
+
 def create_room(name: str, title: str, creator_id: int, criteria: list, alternatives: list, description: str = ""):
     conn = get_db()
     cursor = _cursor(conn)

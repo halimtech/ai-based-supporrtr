@@ -57,6 +57,10 @@ function App() {
   const [showEditSpace, setShowEditSpace] = useState(false);
   const [editSpaceDescription, setEditSpaceDescription] = useState("");
 
+  // Edit profile state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState("");
+
   // Join space state
   const [joinCode, setJoinCode] = useState("");
 
@@ -213,6 +217,26 @@ function App() {
     setSpaces([]);
     setCurrentSpace(null);
     setSpaceData(null);
+  }
+
+  async function handleUpdateProfile(e) {
+    e.preventDefault();
+    try {
+      const res = await api("/api/me", {
+        method: "PUT",
+        body: JSON.stringify({ name: editName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus(data.detail || "Could not update profile.");
+        return;
+      }
+      setUser((prev) => ({ ...prev, name: data.name }));
+      setShowEditProfile(false);
+      setStatus("Profile updated.");
+    } catch {
+      setStatus("Network error while updating profile.");
+    }
   }
 
   function dismissOnboarding() {
@@ -508,6 +532,13 @@ function App() {
             <p className="subtitle">Welcome, {user?.name || user?.username}.</p>
           </div>
           <div className="topbar-actions">
+            <button
+              className="secondary-button"
+              onClick={() => { setEditName(user?.name || user?.username || ""); setShowEditProfile(true); }}
+              type="button"
+            >
+              Edit Profile
+            </button>
             <button className="secondary-button" onClick={() => setShowCreate(true)} type="button">
               Create Voting Space
             </button>
@@ -558,6 +589,30 @@ function App() {
                   Got it
                 </button>
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {showEditProfile ? (
+          <div className="modal-overlay" role="dialog" aria-modal="true">
+            <div className="modal-card">
+              <h2>Edit Profile</h2>
+              <p className="subtitle">Update your display name.</p>
+              <form onSubmit={handleUpdateProfile} className="create-room-form" style={{ gap: 18 }}>
+                <label className="field">
+                  <span>Name</span>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Your display name"
+                    required
+                  />
+                </label>
+                <div className="form-actions">
+                  <button className="primary-button" type="submit">Save Changes</button>
+                  <button className="secondary-button" type="button" onClick={() => setShowEditProfile(false)}>Cancel</button>
+                </div>
+              </form>
             </div>
           </div>
         ) : null}
