@@ -190,6 +190,22 @@ def init_db():
         cursor3.close()
         conn3.close()
 
+    # Migration: add name column to users if not present
+    conn4 = get_db()
+    if IS_POSTGRES:
+        conn4.autocommit = True
+    cursor4 = _cursor(conn4)
+    try:
+        cursor4.execute("ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+        if not IS_POSTGRES:
+            conn4.commit()
+    except Exception:
+        if not IS_POSTGRES:
+            conn4.rollback()
+    finally:
+        cursor4.close()
+        conn4.close()
+
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
@@ -218,27 +234,28 @@ def now_iso() -> str:
     return datetime.utcnow().isoformat()
 
 
-def create_user(username: str, password: str):
+def create_user(username: str, password: str, name: str = ""):
     conn = get_db()
     cursor = _cursor(conn)
     password_hash = hash_password(password)
     token = generate_token()
+    display_name = name.strip() if name and name.strip() else username
     ph = _ph()
     try:
         if IS_POSTGRES:
             cursor.execute(
-                f"INSERT INTO users (username, password_hash, token, created_at) VALUES ({ph}, {ph}, {ph}, {ph}) RETURNING id",
-                (username, password_hash, token, now_iso()),
+                f"INSERT INTO users (username, password_hash, token, name, created_at) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}) RETURNING id",
+                (username, password_hash, token, display_name, now_iso()),
             )
             user_id = cursor.fetchone()["id"]
         else:
             cursor.execute(
-                f"INSERT INTO users (username, password_hash, token, created_at) VALUES ({ph}, {ph}, {ph}, {ph})",
-                (username, password_hash, token, now_iso()),
+                f"INSERT INTO users (username, password_hash, token, name, created_at) VALUES ({ph}, {ph}, {ph}, {ph}, {ph})",
+                (username, password_hash, token, display_name, now_iso()),
             )
             user_id = cursor.lastrowid
         conn.commit()
-        return {"id": user_id, "username": username, "token": token}
+        return {"id": user_id, "username": username, "name": display_name, "token": token}
     except DBIntegrityError:
         return None
     finally:
@@ -250,7 +267,7 @@ def get_user_by_token(token: str):
     conn = get_db()
     cursor = _cursor(conn)
     ph = _ph()
-    cursor.execute(f"SELECT id, username, token FROM users WHERE token = {ph}", (token,))
+    cursor.execute(f"SELECT id, username, name, token FROM users WHERE token = {ph}", (token,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -261,7 +278,7 @@ def get_user_by_username(username: str):
     conn = get_db()
     cursor = _cursor(conn)
     ph = _ph()
-    cursor.execute(f"SELECT id, username, password_hash, token FROM users WHERE username = {ph}", (username,))
+    cursor.execute(f"SELECT id, username, name, password_hash, token FROM users WHERE username = {ph}", (username,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -391,7 +408,7 @@ def get_room_members(room_id: int):
     ph = _ph()
     cursor.execute(
         f"""
-        SELECT u.id, u.username FROM users u
+        SELECT u.id, u.username, u.name FROM users u
         JOIN room_members rm ON u.id = rm.user_id
         WHERE rm.room_id = {ph}
         """,
@@ -432,7 +449,7 @@ def get_messages(room_id: int, limit: int = 100):
     ph = _ph()
     cursor.execute(
         f"""
-        SELECT m.id, m.content, m.created_at, u.username as author
+        SELECT m.id, m.content, m.created_at, u.username as author, u.name as author_name
         FROM messages m
         JOIN users u ON m.user_id = u.id
         WHERE m.room_id = {ph}
@@ -481,7 +498,7 @@ def get_ratings(room_id: int):
     cursor = _cursor(conn)
     ph = _ph()
     cursor.execute(
-        f"SELECT r.*, u.username as participant FROM ratings r JOIN users u ON r.user_id = u.id WHERE r.room_id = {ph}",
+        f"SELECT r.*, u.username as participant, u.name as participant_name FROM ratings r JOIN users u ON r.user_id = u.id WHERE r.room_id = {ph}",
         (room_id,),
     )
     rows = cursor.fetchall()
@@ -524,7 +541,7 @@ def get_weights(room_id: int):
     cursor = _cursor(conn)
     ph = _ph()
     cursor.execute(
-        f"SELECT w.*, u.username as participant FROM weights w JOIN users u ON w.user_id = u.id WHERE w.room_id = {ph}",
+        f"SELECT w.*, u.username as participant, u.name as participant_name FROM weights w JOIN users u ON w.user_id = u.id WHERE w.room_id = {ph}",
         (room_id,),
     )
     rows = cursor.fetchall()

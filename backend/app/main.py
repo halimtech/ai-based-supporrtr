@@ -48,7 +48,7 @@ def healthcheck() -> dict[str, str]:
 def register(payload: RegisterRequest):
     if len(payload.password) < 4:
         raise HTTPException(status_code=422, detail="Password must be at least 4 characters")
-    user = db.create_user(payload.username, payload.password)
+    user = db.create_user(payload.username, payload.password, payload.name or payload.username)
     if not user:
         raise HTTPException(status_code=409, detail="Username already taken")
     return {"user": user}
@@ -64,7 +64,7 @@ def login(payload: LoginRequest):
 
 @app.get("/api/me")
 def me(user: dict = Depends(get_current_user)):
-    return {"id": user["id"], "username": user["username"]}
+    return {"id": user["id"], "username": user["username"], "name": user.get("name") or user["username"]}
 
 
 @app.post("/api/spaces")
@@ -125,7 +125,7 @@ def send_message(space_id: int, payload: SendMessageRequest, user: dict = Depend
     if not db.is_room_member(space_id, user["id"]):
         raise HTTPException(status_code=403, detail="You are not a member of this voting space")
     msg_id = db.add_message(space_id, user["id"], payload.content)
-    return {"id": msg_id, "content": payload.content, "author": user["username"], "created_at": db.now_iso()}
+    return {"id": msg_id, "content": payload.content, "author": user["username"], "author_name": user.get("name") or user["username"], "created_at": db.now_iso()}
 
 
 @app.get("/api/spaces/{space_id}/messages")

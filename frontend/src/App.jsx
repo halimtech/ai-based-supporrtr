@@ -32,11 +32,14 @@ function App() {
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const messagesInitialScrollRef = useRef(false);
 
   // Auth form state
   const [authMode, setAuthMode] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [authError, setAuthError] = useState("");
 
   // Create space state
@@ -74,7 +77,7 @@ function App() {
       api("/api/me")
         .then((r) => r.json())
         .then((data) => {
-          setUser(data);
+          setUser({ id: data.id, username: data.username, name: data.name });
           setView("dashboard");
           loadSpaces();
         })
@@ -101,8 +104,14 @@ function App() {
   }, [view, currentSpace]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (messagesContainerRef.current && messages.length > 0) {
+      const container = messagesContainerRef.current;
+      const threshold = 100;
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      if (!messagesInitialScrollRef.current || isNearBottom) {
+        container.scrollTop = container.scrollHeight;
+        messagesInitialScrollRef.current = true;
+      }
     }
   }, [messages]);
 
@@ -149,7 +158,8 @@ function App() {
       if (prev.messages > 0 && newMessages.length > prev.messages) {
         const latest = newMessages[newMessages.length - 1];
         if (latest.author !== user?.username) {
-          addNotification(`New message from ${latest.author}`, "info");
+          const authorName = latest.author_name || latest.author;
+          addNotification(`New message from ${authorName}`, "info");
         }
       }
       if (prev.members > 0 && newMembers > prev.members) {
@@ -168,10 +178,11 @@ function App() {
     e.preventDefault();
     setAuthError("");
     const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+    const body = authMode === "register" ? { username, password, name: name || username } : { username, password };
     try {
       const res = await api(endpoint, {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -181,7 +192,7 @@ function App() {
       const t = data.user.token;
       localStorage.setItem("token", t);
       setToken(t);
-      setUser({ id: data.user.id, username: data.user.username });
+      setUser({ id: data.user.id, username: data.user.username, name: data.user.name });
       if (authMode === "register") {
         localStorage.setItem("justRegistered", "1");
         setView("intro");
@@ -294,6 +305,8 @@ function App() {
     fetchAwayBrief(space.id);
     // Reset notification prev counts so we don't get flooded on re-enter
     prevCountsRef.current = { messages: 0, members: 0, ratings: 0 };
+    // Reset messages scroll so we scroll to bottom on first load
+    messagesInitialScrollRef.current = false;
   }
 
   async function handleUpdateSpace(e) {
@@ -385,6 +398,12 @@ function App() {
   }
 
   const participants = spaceData?.members?.map((m) => m.username) || [];
+  const memberDisplayMap = (spaceData?.members || []).reduce((map, m) => {
+    map[m.username] = m.name || m.username;
+    return map;
+  }, {});
+  const displayName = (username) => memberDisplayMap[username] || username;
+  const participantNames = spaceData?.members?.map((m) => m.name || m.username) || [];
   const alternatives = spaceData?.space?.alternatives || [];
   const criteria = spaceData?.space?.criteria || [];
 
@@ -423,6 +442,12 @@ function App() {
                 Register
               </button>
             </div>
+            {authMode === "register" ? (
+              <label className="field">
+                <span>Name</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your display name" required />
+              </label>
+            ) : null}
             <label className="field">
               <span>Username</span>
               <input value={username} onChange={(e) => setUsername(e.target.value)} required />
@@ -480,7 +505,7 @@ function App() {
           <div>
             <p className="eyebrow">Decision Support</p>
             <h1>Core Delight</h1>
-            <p className="subtitle">Welcome, {user?.username}.</p>
+            <p className="subtitle">Welcome, {user?.name || user?.username}.</p>
           </div>
           <div className="topbar-actions">
             <button className="secondary-button" onClick={() => setShowCreate(true)} type="button">
@@ -833,7 +858,7 @@ function App() {
                 </div>
                 <div className="intro-card">
                   <h4>Members</h4>
-                  <p>{participants.join(", ") || "No members yet."}</p>
+                  <p>{participantNames.join(", ") || "No members yet."}</p>
                 </div>
                 <div className="intro-card">
                   <h4>How it works</h4>
@@ -870,7 +895,7 @@ function App() {
                     <article className="rating-block">
                       <div className="rating-block-header">
                         <h3>Your Criteria Weights</h3>
-                        <span>{user?.username}</span>
+                        <span>{user?.name || user?.username}</span>
                       </div>
                       <p className="subtitle" style={{ marginBottom: 12 }}>
                         How important is each criterion to you? (1 = low, 5 = high)
@@ -905,7 +930,7 @@ function App() {
                       <article className="rating-block" key={alternative}>
                         <div className="rating-block-header">
                           <h3>{alternative}</h3>
-                          <span>{user?.username}</span>
+                          <span>{user?.name || user?.username}</span>
                         </div>
                         <div className="rating-grid">
                           {criteria.map((criterion) => (
@@ -956,7 +981,7 @@ function App() {
                     <div className={`vote-progress ${analysis.consensusReached ? "consensus-ok" : "consensus-bad"}`}>
                       <p>
                         <strong>{analysis.consensusReached ? "Consensus reached" : "No consensus reached"}</strong>
-                        {analysis.topDeviator ? ` — Top deviator: ${analysis.topDeviator}` : ""}
+                        {analysis.topDeviator ? ` — Top deviator: ${displayName(analysis.topDeviator)}` : ""}
                         {typeof analysis.entropy === "number" ? ` — Entropy: ${analysis.entropy.toFixed(4)}` : ""}
                       </p>
                     </div>
@@ -1046,7 +1071,7 @@ function App() {
                   ) : (
                     <div className="deviator-card">
                       <h4>⚠️ Consensus Not Reached</h4>
-                      <p>Top deviator: <strong>{analysis.topDeviator || "Unknown"}</strong>. Entropy: {analysis.entropy?.toFixed(4)}.</p>
+                      <p>Top deviator: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>. Entropy: {analysis.entropy?.toFixed(4)}.</p>
                       <p style={{ marginTop: 8 }}>Consider discussing the differences and adjusting your ratings to improve alignment.</p>
                     </div>
                   )}
@@ -1069,7 +1094,7 @@ function App() {
                       <article className="rating-block">
                         <div className="rating-block-header">
                           <h3>Your Criteria Weights</h3>
-                          <span>{user?.username}</span>
+                          <span>{user?.name || user?.username}</span>
                         </div>
                         <div className="rating-grid">
                           {criteria.map((criterion) => (
@@ -1101,7 +1126,7 @@ function App() {
                         <article className="rating-block" key={`consensus-${alternative}`}>
                           <div className="rating-block-header">
                             <h3>{alternative}</h3>
-                            <span>{user?.username}</span>
+                            <span>{user?.name || user?.username}</span>
                           </div>
                           <div className="rating-grid">
                             {criteria.map((criterion) => (
@@ -1167,10 +1192,10 @@ function App() {
             <div className="section-heading">
               <h3>Discussion</h3>
             </div>
-            <div className="discussion-messages sidebar-discussion-messages">
+            <div className="discussion-messages sidebar-discussion-messages" ref={messagesContainerRef}>
               {messages.map((msg) => (
                 <div className={`discussion-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
-                  <span className="discussion-author">{msg.author}</span>
+                  <span className="discussion-author">{msg.author_name || msg.author}</span>
                   <span className="discussion-content">{msg.content}</span>
                   <span className="discussion-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
                 </div>
@@ -1193,7 +1218,7 @@ function App() {
           <section className="sidebar-panel">
             <h3>Members</h3>
             <div className="chip-list">
-              {participants.map((p) => (
+              {participantNames.map((p) => (
                 <span className="editable-chip" key={p}>{p}</span>
               ))}
             </div>
