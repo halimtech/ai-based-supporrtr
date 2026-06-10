@@ -122,7 +122,12 @@ def update_space(space_id: int, payload: UpdateRoomRequest, user: dict = Depends
         raise HTTPException(status_code=404, detail="Voting space not found")
     if space["creator_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Only the voting space creator can edit the voting space")
-    db.update_room_description(space_id, payload.description)
+    db.update_room(
+        space_id,
+        description=payload.description,
+        alternatives=payload.alternatives if payload.alternatives else None,
+        criteria=[{"name": c.name, "weight": c.weight} for c in payload.criteria] if payload.criteria else None,
+    )
     updated = db.get_room_by_id(space_id)
     return {"space": updated}
 

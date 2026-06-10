@@ -565,17 +565,31 @@ def get_weights(room_id: int):
     return [dict(row) for row in rows]
 
 
-def update_room_description(room_id: int, description: str):
+def update_room(room_id: int, description: str = None, alternatives: list = None, criteria: list = None):
     conn = get_db()
     cursor = _cursor(conn)
     ph = _ph()
-    cursor.execute(
-        f"UPDATE rooms SET description = {ph} WHERE id = {ph}",
-        (description, room_id),
-    )
+    fields = []
+    values = []
+    if description is not None:
+        fields.append(f"description = {ph}")
+        values.append(description)
+    if alternatives is not None:
+        fields.append(f"alternatives_json = {ph}")
+        values.append(json.dumps(alternatives))
+    if criteria is not None:
+        fields.append(f"criteria_json = {ph}")
+        values.append(json.dumps(criteria))
+    if not fields:
+        cursor.close()
+        conn.close()
+        return True
+    values.append(room_id)
+    cursor.execute(f"UPDATE rooms SET {', '.join(fields)} WHERE id = {ph}", values)
     conn.commit()
     cursor.close()
     conn.close()
+    return True
 
 
 def is_room_member(room_id: int, user_id: int) -> bool:

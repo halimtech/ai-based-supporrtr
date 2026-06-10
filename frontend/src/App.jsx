@@ -61,6 +61,11 @@ function App() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState("");
 
+  // Edit alternatives/criteria state
+  const [showEditConfig, setShowEditConfig] = useState(false);
+  const [editAlternatives, setEditAlternatives] = useState([]);
+  const [editCriteria, setEditCriteria] = useState([]);
+
   // Join space state
   const [joinCode, setJoinCode] = useState("");
 
@@ -356,6 +361,33 @@ function App() {
     }
   }
 
+  async function handleUpdateConfig(e) {
+    e.preventDefault();
+    if (!currentSpace) return;
+    const alts = editAlternatives.map((a) => a.trim()).filter(Boolean);
+    const crits = editCriteria.map((c) => ({ name: c.name.trim(), weight: Number(c.weight) || 0 })).filter((c) => c.name);
+    if (alts.length === 0 || crits.length === 0) {
+      setStatus("Please provide at least one alternative and one criterion.");
+      return;
+    }
+    try {
+      const res = await api(`/api/spaces/${currentSpace.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ alternatives: alts, criteria: crits }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus(data.detail || "Could not update voting space.");
+        return;
+      }
+      setShowEditConfig(false);
+      setStatus("Space updated.");
+      loadSpace(currentSpace.id);
+    } catch {
+      setStatus("Network error while updating voting space.");
+    }
+  }
+
   async function sendMessage(e) {
     e.preventDefault();
     if (!messageDraft.trim() || !currentSpace) return;
@@ -510,8 +542,8 @@ function App() {
               <p className="subtitle">Our algorithm finds the fairest option and shows consensus insights.</p>
             </div>
             <div className="intro-step">
-              <strong>4. Discuss in the discussion panel</strong>
-              <p className="subtitle">Use the discussion panel to talk things through after seeing the results.</p>
+              <strong>4. Chat in the chat panel</strong>
+              <p className="subtitle">Use the chat panel to talk things through after seeing the results.</p>
             </div>
           </div>
           <button className="primary-button" onClick={() => { setView("dashboard"); loadSpaces(); }} type="button">
@@ -569,7 +601,7 @@ function App() {
                 </div>
                 <div className="onboarding-step">
                   <strong>4. Discuss</strong>
-                  <p>Use the discussion panel to talk through results and next steps with your team.</p>
+                  <p>Use the chat panel to talk through results and next steps with your team.</p>
                 </div>
               </div>
 
@@ -731,7 +763,7 @@ function App() {
   const spaceDesc = spaceData?.space?.description || currentSpace?.description || "";
 
   return (
-    <div className="app-shell">
+    <div className="app-shell space-view">
       {/* Notifications */}
       <div className="notification-container">
         {notifications.map((n) => (
@@ -813,6 +845,59 @@ function App() {
         </div>
       ) : null}
 
+      {/* Edit Alternatives & Criteria Modal */}
+      {showEditConfig && currentSpace?.creator_id === user?.id ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <h2>Edit Alternatives & Criteria</h2>
+            <p className="subtitle">Update the options and criteria for {currentSpace?.name}.</p>
+            <form onSubmit={handleUpdateConfig} className="create-room-form" style={{ gap: 18 }}>
+              <div>
+                <h4>Alternatives</h4>
+                {editAlternatives.map((alt, idx) => (
+                  <div className="inline-form" key={idx}>
+                    <input value={alt} onChange={(e) => {
+                      const next = [...editAlternatives];
+                      next[idx] = e.target.value;
+                      setEditAlternatives(next);
+                    }} placeholder={`Alternative ${idx + 1}`} required />
+                    {editAlternatives.length > 1 ? (
+                      <button type="button" className="secondary-button" onClick={() => setEditAlternatives(editAlternatives.filter((_, i) => i !== idx))}>Remove</button>
+                    ) : null}
+                  </div>
+                ))}
+                <button type="button" className="secondary-button" onClick={() => setEditAlternatives([...editAlternatives, ""])}>Add Alternative</button>
+              </div>
+              <div>
+                <h4>Criteria</h4>
+                {editCriteria.map((c, idx) => (
+                  <div className="inline-form" key={idx}>
+                    <input value={c.name} onChange={(e) => {
+                      const next = [...editCriteria];
+                      next[idx] = { ...next[idx], name: e.target.value };
+                      setEditCriteria(next);
+                    }} placeholder="Criterion name" required />
+                    <input type="number" min="0" max="100" value={c.weight} onChange={(e) => {
+                      const next = [...editCriteria];
+                      next[idx] = { ...next[idx], weight: Number(e.target.value) };
+                      setEditCriteria(next);
+                    }} style={{ width: 80 }} required />
+                    {editCriteria.length > 1 ? (
+                      <button type="button" className="secondary-button" onClick={() => setEditCriteria(editCriteria.filter((_, i) => i !== idx))}>Remove</button>
+                    ) : null}
+                  </div>
+                ))}
+                <button type="button" className="secondary-button" onClick={() => setEditCriteria([...editCriteria, { name: "", weight: 20 }])}>Add Criterion</button>
+              </div>
+              <div className="form-actions">
+                <button className="primary-button" type="submit">Save Changes</button>
+                <button className="secondary-button" type="button" onClick={() => setShowEditConfig(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       <header className="topbar">
         <div>
           <p className="eyebrow">Voting Space {currentSpace?.code}</p>
@@ -821,16 +906,29 @@ function App() {
         </div>
         <div className="topbar-actions">
           {currentSpace?.creator_id === user?.id ? (
-            <button
-              className="secondary-button"
-              onClick={() => {
-                setEditSpaceDescription(spaceDesc);
-                setShowEditSpace(true);
-              }}
-              type="button"
-            >
-              ✏️ Edit Voting Space
-            </button>
+            <>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setEditSpaceDescription(spaceDesc);
+                  setShowEditSpace(true);
+                }}
+                type="button"
+              >
+                ✏️ Edit Voting Space
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setEditAlternatives([...alternatives]);
+                  setEditCriteria(criteria.map((c) => ({ ...c })));
+                  setShowEditConfig(true);
+                }}
+                type="button"
+              >
+                ✏️ Edit Alternatives & Criteria
+              </button>
+            </>
           ) : null}
           <button className="secondary-button" onClick={() => { setView("dashboard"); setCurrentSpace(null); }} type="button">
             Back to Dashboard
@@ -858,10 +956,6 @@ function App() {
 
           {spaceTab === "introduction" ? (
             <div className="panel">
-              <div className="section-heading">
-                <h2>Introduction</h2>
-                <p>Overview of the voting space before you start voting.</p>
-              </div>
               <div className="welcome-banner">
                 <p className="welcome-text">
                   Hello! You are here to decide on the trip — <strong>{currentSpace?.title}</strong>. Here are your options and the criteria we will use to evaluate them.
@@ -1243,21 +1337,21 @@ function App() {
               </button>
             </section>
           ) : null}
-          <section className="sidebar-panel discussion-sidebar-panel">
+          <section className="sidebar-panel chat-sidebar-panel">
             <div className="section-heading">
-              <h3>Discussion</h3>
+              <h3>Chat</h3>
             </div>
-            <div className="discussion-messages sidebar-discussion-messages" ref={messagesContainerRef}>
+            <div className="chat-messages sidebar-chat-messages" ref={messagesContainerRef}>
               {messages.map((msg) => (
-                <div className={`discussion-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
-                  <span className="discussion-author">{msg.author_name || msg.author}</span>
-                  <span className="discussion-content">{msg.content}</span>
-                  <span className="discussion-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
+                <div className={`chat-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
+                  <span className="chat-author">{msg.author_name || msg.author}</span>
+                  <span className="chat-content">{msg.content}</span>
+                  <span className="chat-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
-            <form className="inline-form discussion-form" onSubmit={sendMessage}>
+            <form className="inline-form chat-form" onSubmit={sendMessage}>
               <input value={messageDraft} onChange={(e) => setMessageDraft(e.target.value)} placeholder="Type a message..." />
               <button className="primary-button" type="submit">Send</button>
             </form>

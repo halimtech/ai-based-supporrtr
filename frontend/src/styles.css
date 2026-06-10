@@ -41,6 +41,29 @@ button {
   padding: 28px 0 40px;
 }
 
+.app-shell.space-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell.space-view .layout {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.app-shell.space-view .workspace {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.app-shell.space-view .sidebar {
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -502,15 +525,15 @@ button {
   align-items: center;
 }
 
-/* Discussion */
-.discussion-panel {
+/* Chat */
+.chat-panel {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
   min-height: 420px;
 }
 
-.discussion-messages {
+.chat-messages {
   display: grid;
   gap: 10px;
   align-content: flex-start;
@@ -518,7 +541,7 @@ button {
   max-height: 520px;
 }
 
-.discussion-message {
+.chat-message {
   display: grid;
   gap: 4px;
   padding: 10px 14px;
@@ -528,39 +551,39 @@ button {
   max-width: 80%;
 }
 
-.discussion-message.is-me {
+.chat-message.is-me {
   background: var(--accent-soft);
   justify-self: flex-end;
 }
 
-.discussion-author {
+.chat-author {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--accent);
 }
 
-.discussion-content {
+.chat-content {
   font-size: 0.95rem;
 }
 
-.discussion-time {
+.chat-time {
   font-size: 0.72rem;
   color: var(--muted);
 }
 
-.discussion-form {
+.chat-form {
   margin-top: 4px;
 }
 
-/* Sidebar Discussion */
-.discussion-sidebar-panel {
+/* Sidebar Chat */
+.chat-sidebar-panel {
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
   min-height: 280px;
 }
 
-.sidebar-discussion-messages {
+.sidebar-chat-messages {
   display: grid;
   gap: 8px;
   align-content: flex-start;
@@ -568,7 +591,7 @@ button {
   max-height: 320px;
 }
 
-.sidebar-discussion-messages .discussion-message {
+.sidebar-chat-messages .chat-message {
   max-width: 95%;
 }
 

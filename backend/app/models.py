@@ -62,7 +62,9 @@ class SaveWeightRequest(BaseModel):
 
 
 class UpdateRoomRequest(BaseModel):
-    description: str = Field("", max_length=1000)
+    description: str | None = None
+    alternatives: list[str] | None = None
+    criteria: list[CriterionInput] | None = None
 
 
 class UpdateUserRequest(BaseModel):
