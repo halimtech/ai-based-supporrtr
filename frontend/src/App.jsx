@@ -28,7 +28,7 @@ function App() {
   const [ratingsMap, setRatingsMap] = useState({});
   const [weightsMap, setWeightsMap] = useState({});
   const [analysis, setAnalysis] = useState(null);
-  const [spaceTab, setSpaceTab] = useState("introduction"); // introduction, vote, results, consensus
+  const [spaceTab, setSpaceTab] = useState("introduction"); // introduction, vote, consensus, results
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef(null);
@@ -443,9 +443,9 @@ function App() {
         return;
       }
       setAnalysis(data);
-      setSpaceTab("results");
+      setSpaceTab("consensus");
       setStatus("Analysis complete.");
-      addNotification("Analysis complete! Results are ready.", "success");
+      addNotification("Analysis complete! Consensus Phase is ready.", "success");
     } catch {
       setStatus("Analysis request failed.");
     } finally {
@@ -942,7 +942,7 @@ function App() {
       <main className="layout">
         <section className="workspace">
           <nav className="stepper" aria-label="Space tabs">
-            {["Introduction", "Vote", "Results", "Consensus Phase"].map((label) => (
+            {["Introduction", "Vote", "Consensus Phase", "Results"].map((label) => (
               <button
                 key={label}
                 className={`step-chip ${spaceTab === label.toLowerCase().replace(" phase", "") ? "is-active" : ""}`}
@@ -1015,8 +1015,8 @@ function App() {
                     1. Review the alternatives and criteria above.<br />
                     2. In the <strong>Vote</strong> tab, set your personal weights and rate each alternative on every criterion using a 1–5 scale.<br />
                     3. Once everyone has voted, run the analysis in the <strong>Vote</strong> tab.<br />
-                    4. Check the <strong>Results</strong> tab for the group recommendation and consensus status.<br />
-                    5. Use the <strong>Consensus Phase</strong> tab to discuss and refine your ratings if needed.
+                    4. Check the <strong>Consensus Phase</strong> tab for the consensus status and refine your ratings if needed.<br />
+                    5. Check the <strong>Results</strong> tab for the group recommendation and ranking.
                   </p>
                 </div>
               </div>
