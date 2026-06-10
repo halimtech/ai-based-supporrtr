@@ -512,7 +512,7 @@ function App() {
               <span>Password</span>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </label>
-            {authError ? <p className="auth-error">{authError}</p> : null}
+            {authError ? <p className="auth-error shake">{authError}</p> : null}
             <button className="primary-button" type="submit">
               {authMode === "login" ? "Login" : "Register"}
             </button>
@@ -1111,7 +1111,11 @@ function App() {
                     ))}
                   </div>
                   <button className="primary-button" onClick={runAnalysis} type="button" disabled={isSubmitting}>
-                    {isSubmitting ? "Analyzing..." : "Run Analysis"}
+                    {isSubmitting ? (
+                      <span className="loading-dots">Analyzing<span>.</span><span>.</span><span>.</span></span>
+                    ) : (
+                      "Run Analysis"
+                    )}
                   </button>
                 </>
               )}
@@ -1127,7 +1131,7 @@ function App() {
               {analysis ? (
                 <>
                   {typeof analysis.consensusReached === "boolean" ? (
-                    <div className={`vote-progress ${analysis.consensusReached ? "consensus-ok" : "consensus-bad"}`}>
+                    <div className={`vote-progress ${analysis.consensusReached ? "consensus-ok pulse-green" : "consensus-bad pulse-red"}`}>
                       <p>
                         <strong>{analysis.consensusReached ? "Consensus reached" : "No consensus reached"}</strong>
                         {analysis.topDeviator ? ` — Top deviator: ${displayName(analysis.topDeviator)}` : ""}
@@ -1135,7 +1139,7 @@ function App() {
                       </p>
                     </div>
                   ) : null}
-                  <section className="winner-band">
+                  <section className="winner-band bounce">
                     <div>
                       <p className="eyebrow">Recommended Option</p>
                       <h2>{analysis.topChoice.alternative}</h2>
@@ -1307,7 +1311,11 @@ function App() {
                       ))}
                     </div>
                     <button className="primary-button" onClick={runAnalysis} type="button" disabled={isSubmitting} style={{ marginTop: 16 }}>
-                      {isSubmitting ? "Analyzing..." : "Re-run Analysis"}
+                      {isSubmitting ? (
+                        <span className="loading-dots">Analyzing<span>.</span><span>.</span><span>.</span></span>
+                      ) : (
+                        "Re-run Analysis"
+                      )}
                     </button>
                   </div>
                 </div>
