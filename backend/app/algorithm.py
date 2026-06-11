@@ -176,145 +176,122 @@ def compute_entropy(probabilities: list[float]) -> float:
     return -sum(p * math.log2(p) for p in probabilities if p > 0)
 
 
+def _frequency_distribution(values: list[float]) -> tuple[list[float], list[int]]:
+    """Return (unique_values, counts) preserving the empirical frequency."""
+    counts: dict[float, int] = {}
+    for v in values:
+        counts[v] = counts.get(v, 0) + 1
+    items = sorted(counts.items())
+    return [v for v, _ in items], [c for _, c in items]
+
+
 def run_montecarlo_saw(
     judgements: dict,
     criteria: list[str],
     alternatives: list[str],
     iterations: int = 10000,
 ) -> dict:
+    """SMAA-2 style Monte Carlo over the empirical opinion distribution.
+
+    Each iteration samples one rating per (criterion, alternative) cell and one
+    weight per criterion, *frequency-weighted* across participants — so the
+    majority opinion has proportionally more influence than a single outlier.
+    Acceptability and consensus are then computed from rank-1 frequencies.
+    """
     persons = list(judgements.keys())
     num_criteria = len(criteria)
     num_alts = len(alternatives)
 
-    # a) Aggregated judgments
-    aggregated_values: list[list[float]] = []
-    for c_index, c in enumerate(criteria):
+    # Empirical distributions per cell (criterion, alternative) and per weight.
+    rating_dist: dict[tuple[int, str], tuple[list[float], list[int]]] = {}
+    for c_index in range(num_criteria):
         for a in alternatives:
             values = [judgements[p][a][c_index] for p in persons]
-            unique = sorted(set(values))
-            aggregated_values.append(unique)
+            rating_dist[(c_index, a)] = _frequency_distribution(values)
 
-    columns = [f"{a}_{i}" for a in alternatives for i in range(1, 4)]
+    weight_dist: list[tuple[list[float], list[int]]] = []
+    for c_index in range(num_criteria):
+        ws = [judgements[p]["w"][c_index] for p in persons]
+        weight_dist.append(_frequency_distribution(ws))
 
-    # b) Aggregated preferences (weights)
-    group_weights = [judgements[p]["w"] for p in persons]
-    criteria_weights = list(zip(*group_weights))
-    aggregated_prefs = [sorted(set(w)) for w in criteria_weights]
+    rank_counts: dict[str, dict[int, float]] = {alt: defaultdict(float) for alt in alternatives}
+    winner_acceptability: dict[str, float] = dict.fromkeys(alternatives, 0.0)
 
-    # c) Containers for acceptability indices
-    final_binary_tables = {alt: pd.DataFrame(0, index=criteria, columns=columns) for alt in alternatives}
-    weight_columns = [
-        f"{crit}-{j}" if j > 0 else crit
-        for i, crit in enumerate(criteria)
-        for j in range(len(aggregated_prefs[i]))
-    ]
-    final_weight_use_df = pd.DataFrame(0, index=alternatives, columns=weight_columns)
-    rank_counts: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
-    winner_counts = {alt: 0 for alt in alternatives}
-
-    # d) Monte Carlo loop
     for _ in range(iterations):
-        random_matrix: list[list[float]] = []
-        used_values: list[list[float]] = []
-        counter = 0
+        # Sample ratings: criteria × alternatives matrix
+        sampled_matrix: list[list[float]] = []
         for c_index in range(num_criteria):
             row: list[float] = []
-            row_used: list[float] = []
             for a in alternatives:
-                val = random.choice(aggregated_values[counter])
-                row.append(val)
-                row_used.append(val)
-                counter += 1
-            random_matrix.append(row)
-            used_values.append(row_used)
+                vals, counts = rating_dist[(c_index, a)]
+                row.append(random.choices(vals, weights=counts, k=1)[0])
+            sampled_matrix.append(row)
 
-        random_df = pd.DataFrame(random_matrix, index=criteria, columns=alternatives)
-        random_weights = [random.choice(w) for w in aggregated_prefs]
-        matrix_for_saw = random_df.T.values
-        scores, ranks = saw_raw(matrix_for_saw, random_weights)
+        sampled_weights: list[float] = []
+        for c_index in range(num_criteria):
+            vals, counts = weight_dist[c_index]
+            sampled_weights.append(random.choices(vals, weights=counts, k=1)[0])
 
-        # Update acceptability indices
-        winners = [alternatives[i] for i, rnk in enumerate(ranks) if rnk == 1]
-        for winner in winners:
-            winner_counts[winner] += 1
-            table = final_binary_tables[winner]
-            for c_index, c in enumerate(criteria):
-                for a_index, a in enumerate(alternatives):
-                    used_val = used_values[c_index][a_index]
-                    values = [judgements[p][a][c_index] for p in persons]
-                    unique = sorted(set(values))
-                    for i, val in enumerate(unique[:3]):
-                        col_name = f"{a}_{i+1}"
-                        if val == used_val:
-                            table.loc[c, col_name] += 1
-            for i, crit in enumerate(criteria):
-                selected_weight = random_weights[i]
-                values = aggregated_prefs[i]
-                for j, v in enumerate(values):
-                    col_name = f"{crit}-{j}" if j > 0 else crit
-                    if v == selected_weight:
-                        final_weight_use_df.loc[winner, col_name] += 1
+        # Degenerate case: all weights are 0 → every alternative ties.
+        if sum(sampled_weights) == 0:
+            share = 1.0 / num_alts
+            for a in alternatives:
+                winner_acceptability[a] += share
+                rank_counts[a][1] += share
+            continue
 
-        # Update rank counts
-        for alt_, rnk in zip(alternatives, ranks):
-            rank_counts[alt_][rnk] += 1
+        matrix_for_saw = [
+            [sampled_matrix[c_index][a_index] for c_index in range(num_criteria)]
+            for a_index in range(num_alts)
+        ]
+        _, ranks = saw_raw(matrix_for_saw, sampled_weights)
 
-    # e) Rank probabilities
+        # Distribute rank credit fractionally among ties so that probabilities
+        # at every rank form a proper distribution (each row of rank_prob sums
+        # to 1 over alternatives at a given rank, and per-alt distributions
+        # over ranks also sum to 1).
+        rank_groups: dict[int, list[str]] = defaultdict(list)
+        for a_index, rnk in enumerate(ranks):
+            rank_groups[rnk].append(alternatives[a_index])
+        for rnk, group in rank_groups.items():
+            share = 1.0 / len(group)
+            for alt_ in group:
+                rank_counts[alt_][rnk] += share
+                if rnk == 1:
+                    winner_acceptability[alt_] += share
+
+    # Rank acceptability matrix (each row sums to 1 over ranks)
     all_ranks = sorted({r for alt_ranks in rank_counts.values() for r in alt_ranks})
-    rank_freq_df = pd.DataFrame(0, index=alternatives, columns=[f"Rang {r}" for r in all_ranks])
+    rank_freq_df = pd.DataFrame(0.0, index=alternatives, columns=[f"Rang {r}" for r in all_ranks])
     for alt_ in alternatives:
         for r_ in all_ranks:
             rank_freq_df.loc[alt_, f"Rang {r_}"] = rank_counts[alt_][r_]
     rank_prob_df = rank_freq_df / iterations
 
-    # f) Judgement entropy matrix
-    entropy_matrix = pd.DataFrame(index=criteria, columns=columns)
-    for c in criteria:
-        for col in columns:
-            freqs = [final_binary_tables[alt_].loc[c, col] for alt_ in alternatives]
-            total = sum(freqs)
-            if total > 0:
-                probs = [f / total for f in freqs]
-            else:
-                probs = [0.0] * len(alternatives)
-            entropy_matrix.loc[c, col] = compute_entropy(probs)
+    # Consensus measure: entropy of the rank-1 acceptability distribution.
+    # 0 → one alternative wins every iteration (full consensus).
+    # log2(num_alts) → winners are spread equally (no consensus).
+    rank1_probs = [winner_acceptability[a] / iterations for a in alternatives]
+    consensus_entropy = compute_entropy(rank1_probs)
 
-    # g) Preference entropies
-    pref_entropy = {}
-    for col in final_weight_use_df.columns:
-        freqs = final_weight_use_df[col].values
-        total = sum(freqs)
-        if total > 0:
-            probs = [f / total for f in freqs]
-        else:
-            probs = [0.0] * len(freqs)
-        pref_entropy[col] = compute_entropy(probs)
-    preference_entropy_df = pd.DataFrame([pref_entropy], index=["Entropy"])
+    h_cutoff = 0.5 * math.log2(num_alts) if num_alts > 1 else 0.0
+    consensus_reached = consensus_entropy <= h_cutoff
 
-    # h) Soft consensus check
-    hmax = np.log2(len(alternatives))
-    h_cutoff = 0.5 * hmax
-    h_curr_max = float(entropy_matrix.values.max())
+    # Always identify the most outlying participant — useful both for
+    # discussion prompts and for borderline-consensus warnings.
+    deviations = compute_deviation_scores(judgements, criteria, alternatives)
+    sorted_devs = sorted(deviations.items(), key=lambda x: x[1], reverse=True)
+    top_person = sorted_devs[0][0] if sorted_devs and sorted_devs[0][1] > 0 else None
 
-    if h_curr_max > h_cutoff:
-        deviations = compute_deviation_scores(judgements, criteria, alternatives)
-        sorted_devs = sorted(deviations.items(), key=lambda x: x[1], reverse=True)
-        top_person, top_dev = sorted_devs[0]
-        return {
-            "consensus_reached": False,
-            "top_person": top_person,
-            "entropy": h_curr_max,
-            "rank_prob": rank_prob_df,
-            "winner_counts": winner_counts,
-        }
-    else:
-        return {
-            "consensus_reached": True,
-            "top_person": None,
-            "entropy": h_curr_max,
-            "rank_prob": rank_prob_df,
-            "winner_counts": winner_counts,
-        }
+    return {
+        "consensus_reached": consensus_reached,
+        "top_person": None if consensus_reached else top_person,
+        "top_deviator_always": top_person,
+        "entropy": consensus_entropy,
+        "entropy_cutoff": h_cutoff,
+        "rank_prob": rank_prob_df,
+        "winner_counts": dict(winner_acceptability),
+    }
 
 
 # =========================================================
@@ -329,18 +306,37 @@ def _build_judgements(
     ratings_lookup: Mapping[str, float],
     weights_list: list[dict[str, object]] | None = None,
 ) -> dict:
+    # Pre-compute a per-criterion fallback weight for participants who have not
+    # submitted their own importance scores.  We prefer (in order):
+    #   1. Average of weights that WERE submitted for that criterion
+    #   2. The criterion's own stored weight (if > 0, i.e. explicitly set)
+    #   3. 1.0 – equal-weight fallback (avoids injecting 0 into aggregated_prefs
+    #      which would make every SAW score 0 and all alternatives tie, falsely
+    #      inflating entropy and preventing consensus from ever being reached)
+    crit_fallback: dict[str, float] = {}
+    for c in criteria:
+        cname = str(c["name"])
+        if weights_list:
+            submitted = [float(x["value"]) for x in weights_list if str(x["criterion"]) == cname]
+            if submitted:
+                crit_fallback[cname] = sum(submitted) / len(submitted)
+                continue
+        raw = float(c.get("weight", 0) or 0)
+        crit_fallback[cname] = raw if raw > 0 else 1.0
+
     judgements: dict = {}
     for p in participants:
         if weights_list:
             w = []
             for c in criteria:
+                cname = str(c["name"])
                 wv = next(
-                    (float(x["value"]) for x in weights_list if str(x["participant"]) == p and str(x["criterion"]) == str(c["name"])),
-                    float(c.get("weight", 5)),
+                    (float(x["value"]) for x in weights_list if str(x["participant"]) == p and str(x["criterion"]) == cname),
+                    crit_fallback[cname],
                 )
                 w.append(wv)
         else:
-            w = [float(c.get("weight", 5)) for c in criteria]
+            w = [crit_fallback[str(c["name"])] for c in criteria]
         judgements[p] = {"w": w}
         for a in alternatives:
             scores = []
@@ -451,7 +447,8 @@ def analyze_decision(
 
     rank_prob_df = discord_result["rank_prob"]
 
-    # Winner probabilities = P(Rang 1)
+    # Winner probabilities = P(rank 1) — already a proper distribution because
+    # ties are now split fractionally inside the Monte Carlo loop.
     winner_probabilities: dict[str, float] = {}
     for alt in normalized_alternatives:
         col = "Rang 1"
@@ -491,29 +488,26 @@ def analyze_decision(
             "disagreement": disagreement,
             "entropy": 0.0,
             "acceptabilityRaw": win_prob,
-            "acceptabilityNormalized": 0.0,
+            "acceptabilityNormalized": round(win_prob, 3),
             "byParticipant": by_participant,
         })
-
-    total_acceptability = sum(float(r["acceptabilityRaw"]) for r in results)
-    for r in results:
-        r["acceptabilityNormalized"] = (
-            round(float(r["acceptabilityRaw"]) / total_acceptability, 3)
-            if total_acceptability > 0
-            else 0.0
-        )
 
     results.sort(key=lambda item: (-float(item["acceptabilityNormalized"]), float(item["disagreement"])))
     top_choice = results[0] if results else None
 
-    # Insights
+    # Insights (English to match the UI)
     insights: list[str] = []
     if top_choice:
         insights.append(
-            f"{top_choice['alternative']} hat aktuell die beste Balance aus Qualität und Zustimmung."
+            f"{top_choice['alternative']} currently offers the best balance of quality and group support."
         )
-        insights.append(f"Der Gruppenscore liegt bei {top_choice['avgScore']:.2f}.")
-        insights.append(f"Die Spannweite in der Gruppe beträgt {top_choice['disagreement']:.2f}.")
+        insights.append(f"Group score: {top_choice['avgScore']:.2f} out of 5.")
+        if float(top_choice["disagreement"]) > 0:
+            insights.append(
+                f"Spread between participants: {top_choice['disagreement']:.2f} points."
+            )
+        else:
+            insights.append("All participants give this option the same weighted score.")
         if len(results) > 1:
             runner_up = results[1]
             gap = round(
@@ -521,27 +515,46 @@ def analyze_decision(
                 - float(runner_up["acceptabilityNormalized"]),
                 3,
             )
-            insights.append(
-                f"Der Vorsprung vor {runner_up['alternative']} beträgt {gap} Acceptability-Punkte."
-            )
+            if gap > 0:
+                insights.append(
+                    f"Lead over {runner_up['alternative']}: {gap} acceptability points."
+                )
+            else:
+                insights.append(
+                    f"Tied with {runner_up['alternative']} on acceptability — discussion may break the tie."
+                )
         win_prob = winner_probabilities.get(str(top_choice["alternative"]), 0.0)
         insights.append(
-            f"In der Monte-Carlo-Simulation gewinnt {top_choice['alternative']} in {round(win_prob * 100, 1)}% der Durchläufe."
+            f"In the Monte Carlo simulation, {top_choice['alternative']} wins {round(win_prob * 100, 1)}% of the runs."
         )
 
-    # Consensus steps
+    # Consensus steps (English)
+    cutoff = float(discord_result.get("entropy_cutoff", 0.5 * math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0))
+    entropy_value = float(discord_result["entropy"])
     consensus_steps: list[str] = []
     if discord_result["consensus_reached"]:
-        consensus_steps.append("Konsens erreicht! Die Entropie ist niedrig genug.")
-        consensus_steps.append(f"Maximale Entropie: {discord_result['entropy']:.4f}.")
+        consensus_steps.append("Consensus reached — the group agrees on the leading option.")
+        consensus_steps.append(
+            f"Rank-1 entropy: {entropy_value:.4f} (cutoff: {cutoff:.4f})."
+        )
+        deviator = discord_result.get("top_deviator_always")
+        if deviator and entropy_value > 0:
+            consensus_steps.append(
+                f"{deviator} differs the most from the group average — worth a quick check-in if you want full alignment."
+            )
     else:
         top_person = discord_result["top_person"]
-        consensus_steps.append(f"Kein Konsens erreicht. Größte Abweichung: {top_person}.")
+        if top_person:
+            consensus_steps.append(
+                f"No consensus yet. Largest deviation from the group: {top_person}."
+            )
+        else:
+            consensus_steps.append("No consensus yet — opinions are spread across alternatives.")
         consensus_steps.append(
-            f"Maximale Entropie: {discord_result['entropy']:.4f} (Cutoff: {0.5 * math.log2(len(normalized_alternatives)):.4f})."
+            f"Rank-1 entropy: {entropy_value:.4f} (cutoff: {cutoff:.4f})."
         )
-        consensus_steps.append("Diskutiert eure Bewertungen und passt sie an, um den Konsens zu verbessern.")
-        consensus_steps.append("Benutzt den Chat, um die unterschiedlichen Meinungen zu klären.")
+        consensus_steps.append("Discuss the differences openly and adjust ratings to align the group.")
+        consensus_steps.append("Use the chat to surface the underlying disagreement.")
 
     return {
         "title": _clean_label(title or "Gemeinsame Entscheidung", "title"),
@@ -561,5 +574,6 @@ def analyze_decision(
         "consensusSteps": consensus_steps,
         "consensusReached": discord_result["consensus_reached"],
         "topDeviator": discord_result["top_person"],
-        "entropy": discord_result["entropy"],
+        "entropy": entropy_value,
+        "entropyCutoff": cutoff,
     }

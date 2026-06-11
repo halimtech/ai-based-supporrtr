@@ -66,7 +66,10 @@ class DecisionAlgorithmTests(unittest.TestCase):
             results[0],
         )
         self.assertTrue(steps)
-        self.assertIn("Entropie", steps[-1])
+        self.assertTrue(
+            any("entropy" in step.lower() for step in steps),
+            f"expected an entropy mention in consensus steps, got: {steps}",
+        )
 
     def test_analyze_decision_returns_complete_payload(self) -> None:
         analysis = analyze_decision(
