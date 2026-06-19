@@ -495,19 +495,22 @@ def analyze_decision(
     results.sort(key=lambda item: (-float(item["acceptabilityNormalized"]), float(item["disagreement"])))
     top_choice = results[0] if results else None
 
-    # Insights (English to match the UI)
+    # Insights (plain English to match the UI)
     insights: list[str] = []
     if top_choice:
+        win_prob_top = winner_probabilities.get(str(top_choice["alternative"]), 0.0)
         insights.append(
-            f"{top_choice['alternative']} currently offers the best balance of quality and group support."
+            f"{top_choice['alternative']} is currently the best overall choice — it scored well and most of the group supports it."
         )
-        insights.append(f"Group score: {top_choice['avgScore']:.2f} out of 5.")
+        insights.append(
+            f"Average group rating: {top_choice['avgScore']:.2f} out of 5 (how good the group thinks this option is)."
+        )
         if float(top_choice["disagreement"]) > 0:
             insights.append(
-                f"Spread between participants: {top_choice['disagreement']:.2f} points."
+                f"Gap between the happiest and least happy member: {top_choice['disagreement']:.2f} points out of 5."
             )
         else:
-            insights.append("All participants give this option the same weighted score.")
+            insights.append("Everyone in the group rates this option exactly the same.")
         if len(results) > 1:
             runner_up = results[1]
             gap = round(
@@ -517,44 +520,49 @@ def analyze_decision(
             )
             if gap > 0:
                 insights.append(
-                    f"Lead over {runner_up['alternative']}: {gap} acceptability points."
+                    f"It is ahead of {runner_up['alternative']} by {round(gap * 100)} percentage points as the group's favourite."
                 )
             else:
                 insights.append(
-                    f"Tied with {runner_up['alternative']} on acceptability — discussion may break the tie."
+                    f"It is currently tied with {runner_up['alternative']} — a short discussion may decide the winner."
                 )
-        win_prob = winner_probabilities.get(str(top_choice["alternative"]), 0.0)
         insights.append(
-            f"In the Monte Carlo simulation, {top_choice['alternative']} wins {round(win_prob * 100, 1)}% of the runs."
+            f"In {round(win_prob_top * 100, 1)}% of tested scenarios, {top_choice['alternative']} comes out as the group's top choice."
         )
 
-    # Consensus steps (English)
+    # Consensus steps (plain English)
     cutoff = float(discord_result.get("entropy_cutoff", 0.5 * math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0))
     entropy_value = float(discord_result["entropy"])
+    max_entropy = math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0
+    if max_entropy > 0:
+        agreement_strength = round((1 - entropy_value / max_entropy) * 100)
+    else:
+        agreement_strength = 100
+    agreement_threshold = 50  # consensus is reached at 50% agreement strength or higher
     consensus_steps: list[str] = []
     if discord_result["consensus_reached"]:
-        consensus_steps.append("Consensus reached — the group agrees on the leading option.")
+        consensus_steps.append("The group agrees — one option clearly stands out as the favourite.")
         consensus_steps.append(
-            f"Rank-1 entropy: {entropy_value:.4f} (cutoff: {cutoff:.4f})."
+            f"Agreement strength: {agreement_strength}% (a clear group decision needs at least {agreement_threshold}%)."
         )
         deviator = discord_result.get("top_deviator_always")
         if deviator and entropy_value > 0:
             consensus_steps.append(
-                f"{deviator} differs the most from the group average — worth a quick check-in if you want full alignment."
+                f"{deviator}'s ratings differ the most from the rest of the group — a quick check-in could bring everyone fully in line."
             )
     else:
         top_person = discord_result["top_person"]
         if top_person:
             consensus_steps.append(
-                f"No consensus yet. Largest deviation from the group: {top_person}."
+                f"The group hasn't agreed yet. {top_person}'s ratings differ the most from everyone else."
             )
         else:
-            consensus_steps.append("No consensus yet — opinions are spread across alternatives.")
+            consensus_steps.append("The group hasn't agreed yet — opinions are split across several options.")
         consensus_steps.append(
-            f"Rank-1 entropy: {entropy_value:.4f} (cutoff: {cutoff:.4f})."
+            f"Agreement strength: {agreement_strength}% (a clear group decision needs at least {agreement_threshold}%)."
         )
-        consensus_steps.append("Discuss the differences openly and adjust ratings to align the group.")
-        consensus_steps.append("Use the chat to surface the underlying disagreement.")
+        consensus_steps.append("Talk through the main differences and update your ratings to move closer together.")
+        consensus_steps.append("Use the chat to share why people scored options differently.")
 
     return {
         "title": _clean_label(title or "Gemeinsame Entscheidung", "title"),
@@ -576,4 +584,6 @@ def analyze_decision(
         "topDeviator": discord_result["top_person"],
         "entropy": entropy_value,
         "entropyCutoff": cutoff,
+        "agreementStrength": agreement_strength,
+        "agreementThreshold": agreement_threshold,
     }

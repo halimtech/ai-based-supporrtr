@@ -16,6 +16,24 @@ function ratingKey(participant, alternative, criterion) {
   return `${participant}__${alternative}__${criterion}`;
 }
 
+// Plain-language labels so users never have to interpret raw numbers.
+// How much someone likes an option on a given criterion (1–5).
+const PREFERENCE_LABELS = {
+  1: "Strongly Disliked",
+  2: "Disliked",
+  3: "Neutral",
+  4: "Preferred",
+  5: "Strongly Preferred",
+};
+// How important a criterion is to someone (1–5).
+const IMPORTANCE_LABELS = {
+  1: "Not Important",
+  2: "Slightly Important",
+  3: "Important",
+  4: "Very Important",
+  5: "Essential",
+};
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(null);
@@ -819,7 +837,7 @@ function App() {
       ) : null}
 
       {/* Edit Space Modal */}
-      {showEditSpace && currentSpace?.creator_id === user?.id ? (
+      {showEditSpace ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
             <h2>Edit Voting Space</h2>
@@ -846,7 +864,7 @@ function App() {
       ) : null}
 
       {/* Edit Alternatives & Criteria Modal */}
-      {showEditConfig && currentSpace?.creator_id === user?.id ? (
+      {showEditConfig ? (
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal-card">
             <h2>Edit Alternatives & Criteria</h2>
@@ -905,7 +923,7 @@ function App() {
           <p className="subtitle">{currentSpace?.title}</p>
         </div>
         <div className="topbar-actions">
-          {currentSpace?.creator_id === user?.id ? (
+          {currentSpace ? (
             <>
               <button
                 className="secondary-button"
@@ -1013,7 +1031,7 @@ function App() {
                   <h4>How it works</h4>
                   <p>
                     1. Review the alternatives and criteria above.<br />
-                    2. In the <strong>Vote</strong> tab, set your personal weights and rate each alternative on every criterion using a 1–5 scale.<br />
+                    2. In the <strong>Vote</strong> tab, set how important each criterion is to you and rate every option from <strong>Strongly Disliked</strong> to <strong>Strongly Preferred</strong>.<br />
                     3. Once everyone has voted, run the analysis in the <strong>Vote</strong> tab.<br />
                     4. Check the <strong>Consensus Phase</strong> tab for the consensus status and refine your ratings if needed.<br />
                     5. Check the <strong>Results</strong> tab for the group recommendation and ranking.
@@ -1047,7 +1065,7 @@ function App() {
                         <span>{user?.name || user?.username}</span>
                       </div>
                       <p className="subtitle" style={{ marginBottom: 12 }}>
-                        How important is each criterion to you? (1 = low, 5 = high)
+                        How important is each criterion to you? Pick a label from "Not Important" to "Essential".
                       </p>
                       <div className="rating-grid">
                         {criteria.map((criterion) => (
@@ -1061,11 +1079,11 @@ function App() {
                                 return (
                                   <button
                                     key={score}
-                                    className={`score-button ${selected ? "is-selected" : ""}`}
+                                    className={`score-button is-word ${selected ? "is-selected" : ""}`}
                                     onClick={() => setWeight(criterion.name, score)}
                                     type="button"
                                   >
-                                    {score}
+                                    {IMPORTANCE_LABELS[score]}
                                   </button>
                                 );
                               })}
@@ -1086,7 +1104,7 @@ function App() {
                             <div className="rating-row" key={`${alternative}-${criterion.name}`}>
                               <div>
                                 <strong>{criterion.name}</strong>
-                                <p>{criterion.weight}% default weight</p>
+                                <p>Suggested importance: {criterion.weight}%</p>
                               </div>
                               <div className="score-picker">
                                 {[1, 2, 3, 4, 5].map((score) => {
@@ -1095,11 +1113,11 @@ function App() {
                                   return (
                                     <button
                                       key={score}
-                                      className={`score-button ${selected ? "is-selected" : ""}`}
+                                      className={`score-button is-word ${selected ? "is-selected" : ""}`}
                                       onClick={() => setRating(alternative, criterion.name, score)}
                                       type="button"
                                     >
-                                      {score}
+                                      {PREFERENCE_LABELS[score]}
                                     </button>
                                   );
                                 })}
@@ -1133,9 +1151,11 @@ function App() {
                   {typeof analysis.consensusReached === "boolean" ? (
                     <div className={`vote-progress ${analysis.consensusReached ? "consensus-ok pulse-green" : "consensus-bad pulse-red"}`}>
                       <p>
-                        <strong>{analysis.consensusReached ? "Consensus reached" : "No consensus reached"}</strong>
-                        {analysis.topDeviator ? ` — Top deviator: ${displayName(analysis.topDeviator)}` : ""}
-                        {typeof analysis.entropy === "number" ? ` — Entropy: ${analysis.entropy.toFixed(4)}` : ""}
+                        <strong>{analysis.consensusReached ? "The group agrees 🎉" : "The group hasn't agreed yet"}</strong>
+                        {typeof analysis.agreementStrength === "number"
+                          ? ` — Agreement strength: ${analysis.agreementStrength}% (a clear decision needs ${analysis.agreementThreshold ?? 50}%)`
+                          : ""}
+                        {analysis.topDeviator ? ` — Most different opinion: ${displayName(analysis.topDeviator)}` : ""}
                       </p>
                     </div>
                   ) : null}
@@ -1143,15 +1163,21 @@ function App() {
                     <div>
                       <p className="eyebrow">Recommended Option</p>
                       <h2>{analysis.topChoice.alternative}</h2>
+                      <p className="winner-explainer">
+                        In {Math.round(analysis.topChoice.acceptabilityNormalized * 100)}% of tested
+                        scenarios, <strong>{analysis.topChoice.alternative}</strong> is the group's top choice.
+                      </p>
                     </div>
                     <div className="winner-stats">
                       <div>
                         <span>Group Score</span>
-                        <strong>{analysis.topChoice.avgScore.toFixed(2)}</strong>
+                        <strong>{analysis.topChoice.avgScore.toFixed(2)} / 5</strong>
+                        <small className="stat-hint">Average rating the group gave this option</small>
                       </div>
                       <div>
-                        <span>Acceptability</span>
-                        <strong>{analysis.topChoice.acceptabilityNormalized}</strong>
+                        <span>Top-Choice Confidence</span>
+                        <strong>{Math.round(analysis.topChoice.acceptabilityNormalized * 100)}%</strong>
+                        <small className="stat-hint">How often it comes out on top</small>
                       </div>
                     </div>
                   </section>
@@ -1168,6 +1194,9 @@ function App() {
 
                     <div className="result-column">
                       <h3>Ranking</h3>
+                      <p className="subtitle" style={{ marginBottom: 12 }}>
+                        How often each option is the group's top choice.
+                      </p>
                       <div className="ranking-list">
                         {analysis.results.map((result, index) => (
                           <div className="ranking-row" key={result.alternative}>
@@ -1181,7 +1210,7 @@ function App() {
                                 style={{ width: `${result.acceptabilityNormalized * 100}%` }}
                               />
                             </div>
-                            <span>{result.acceptabilityNormalized}</span>
+                            <span>{Math.round(result.acceptabilityNormalized * 100)}%</span>
                           </div>
                         ))}
                       </div>
@@ -1189,7 +1218,7 @@ function App() {
                   </section>
 
                   <section className="result-column">
-                    <h3>Next Moderation Steps</h3>
+                    <h3>Suggested Next Steps</h3>
                     <ul className="clean-list">
                       {analysis.consensusSteps.map((stepLine) => (
                         <li key={stepLine}>{stepLine}</li>
@@ -1212,25 +1241,33 @@ function App() {
             <div className="panel">
               <div className="section-heading">
                 <h2>Consensus Phase</h2>
-                <p>Review the consensus status, discuss, and adjust your ratings to align the group.</p>
+                <p>See how close the group is to agreeing, talk it through, and update your ratings to get closer.</p>
               </div>
               {analysis ? (
                 <div className="consensus-panel">
+                  <div className="intro-card">
+                    <h4>What "agreement" means here</h4>
+                    <p>
+                      Agreement strength shows how strongly the group leans towards one option. The group has
+                      a clear, settled decision once it reaches <strong>{analysis.agreementThreshold ?? 50}%</strong> or more.
+                      Below that, opinions are still split and it's worth talking it through.
+                    </p>
+                  </div>
                   {analysis.consensusReached ? (
                     <div className="consensus-ok-card">
-                      <h4>✅ Consensus Reached</h4>
-                      <p>The group is well-aligned. Entropy: {analysis.entropy?.toFixed(4)}.</p>
+                      <h4>✅ The group agrees</h4>
+                      <p>Everyone is well-aligned. Agreement strength: {analysis.agreementStrength}% (a clear decision needs {analysis.agreementThreshold ?? 50}%).</p>
                     </div>
                   ) : (
                     <div className="deviator-card">
-                      <h4>⚠️ Consensus Not Reached</h4>
-                      <p>Top deviator: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>. Entropy: {analysis.entropy?.toFixed(4)}.</p>
-                      <p style={{ marginTop: 8 }}>Consider discussing the differences and adjusting your ratings to improve alignment.</p>
+                      <h4>⚠️ The group hasn't agreed yet</h4>
+                      <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 50}%). Most different opinion: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>.</p>
+                      <p style={{ marginTop: 8 }}>Try discussing where opinions differ and updating your ratings to get closer together.</p>
                     </div>
                   )}
 
                   <div className="intro-card">
-                    <h4>Moderation Steps</h4>
+                    <h4>What to do next</h4>
                     <ul className="clean-list">
                       {analysis.consensusSteps.map((step) => (
                         <li key={step}>{step}</li>
@@ -1261,11 +1298,11 @@ function App() {
                                   return (
                                     <button
                                       key={score}
-                                      className={`score-button ${selected ? "is-selected" : ""}`}
+                                      className={`score-button is-word ${selected ? "is-selected" : ""}`}
                                       onClick={() => setWeight(criterion.name, score)}
                                       type="button"
                                     >
-                                      {score}
+                                      {IMPORTANCE_LABELS[score]}
                                     </button>
                                   );
                                 })}
@@ -1286,7 +1323,7 @@ function App() {
                               <div className="rating-row" key={`consensus-${alternative}-${criterion.name}`}>
                                 <div>
                                   <strong>{criterion.name}</strong>
-                                  <p>{criterion.weight}% default weight</p>
+                                  <p>Suggested importance: {criterion.weight}%</p>
                                 </div>
                                 <div className="score-picker">
                                   {[1, 2, 3, 4, 5].map((score) => {
@@ -1295,11 +1332,11 @@ function App() {
                                     return (
                                       <button
                                         key={score}
-                                        className={`score-button ${selected ? "is-selected" : ""}`}
+                                        className={`score-button is-word ${selected ? "is-selected" : ""}`}
                                         onClick={() => setRating(alternative, criterion.name, score)}
                                         type="button"
                                       >
-                                        {score}
+                                        {PREFERENCE_LABELS[score]}
                                       </button>
                                     );
                                   })}

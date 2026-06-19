@@ -426,6 +426,35 @@ button {
   transform: scale(1.05);
 }
 
+/* Word-label rating buttons (e.g. "Strongly Preferred") need a pill shape
+   instead of the small numeric circle. */
+.score-button.is-word {
+  width: auto;
+  height: auto;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  line-height: 1.1;
+  text-align: center;
+  white-space: normal;
+}
+
+.stat-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.winner-explainer {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 38ch;
+}
+
 .winner-band {
   display: flex;
   justify-content: space-between;
