@@ -1,38 +1,16 @@
 import { useEffect, useState, useRef } from "react";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "" : "http://localhost:8000");
-
-function api(path, options = {}) {
-  const token = localStorage.getItem("token");
-  const headers = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...options.headers,
-  };
-  return fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-}
-
-function ratingKey(participant, alternative, criterion) {
-  return `${participant}__${alternative}__${criterion}`;
-}
-
-// Plain-language labels so users never have to interpret raw numbers.
-// How much someone likes an option on a given criterion (1–5).
-const PREFERENCE_LABELS = {
-  1: "Strongly Disliked",
-  2: "Disliked",
-  3: "Neutral",
-  4: "Preferred",
-  5: "Strongly Preferred",
-};
-// How important a criterion is to someone (1–5).
-const IMPORTANCE_LABELS = {
-  1: "Not Important",
-  2: "Slightly Important",
-  3: "Important",
-  4: "Very Important",
-  5: "Essential",
-};
+import { api, ratingKey } from "./lib/api";
+import RatingPanel from "./components/RatingPanel";
+import IntroView from "./components/IntroView";
+import Sidebar from "./components/Sidebar";
+import Notifications from "./components/Notifications";
+import OnboardingModal from "./components/modals/OnboardingModal";
+import EditProfileModal from "./components/modals/EditProfileModal";
+import CreateSpaceForm from "./components/modals/CreateSpaceForm";
+import EditSpaceModal from "./components/modals/EditSpaceModal";
+import EditConfigModal from "./components/modals/EditConfigModal";
+import BriefDescriptionModal from "./components/modals/BriefDescriptionModal";
+import AwayBriefModal from "./components/modals/AwayBriefModal";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
@@ -541,35 +519,7 @@ function App() {
   }
 
   if (view === "intro") {
-    return (
-      <div className="app-shell auth-shell">
-        <div className="auth-card" style={{ maxWidth: 560 }}>
-          <h1>Welcome to Core Delight</h1>
-          <p className="subtitle">Make better group decisions, together.</p>
-          <div className="intro-content" style={{ display: "grid", gap: 18 }}>
-            <div className="intro-step">
-              <strong>1. Create or join a voting space</strong>
-              <p className="subtitle">Start a voting space and invite others with a simple code.</p>
-            </div>
-            <div className="intro-step">
-              <strong>2. Vote on criteria and alternatives</strong>
-              <p className="subtitle">Everyone sets their own weights and rates each option privately.</p>
-            </div>
-            <div className="intro-step">
-              <strong>3. See the group result</strong>
-              <p className="subtitle">Our algorithm finds the fairest option and shows consensus insights.</p>
-            </div>
-            <div className="intro-step">
-              <strong>4. Chat in the chat panel</strong>
-              <p className="subtitle">Use the chat panel to talk things through after seeing the results.</p>
-            </div>
-          </div>
-          <button className="primary-button" onClick={() => { setView("dashboard"); loadSpaces(); }} type="button">
-            Get Started
-          </button>
-        </div>
-      </div>
-    );
+    return <IntroView onGetStarted={() => { setView("dashboard"); loadSpaces(); }} />;
   }
 
   if (view === "dashboard") {
@@ -599,147 +549,37 @@ function App() {
         </header>
 
         {showOnboarding ? (
-          <div className="modal-overlay" role="dialog" aria-modal="true">
-            <div className="modal-card">
-              <h2>Welcome to Core Delight</h2>
-              <p className="subtitle">A simple way for teams to make fair, structured decisions together.</p>
-
-              <div className="onboarding-steps">
-                <div className="onboarding-step">
-                  <strong>1. Create or join a voting space</strong>
-                  <p>Set up a decision topic and invite teammates with a 6-character code.</p>
-                </div>
-                <div className="onboarding-step">
-                  <strong>2. Vote</strong>
-                  <p>Everyone privately rates each option on the criteria that matter. Set your own weights to reflect what you care about.</p>
-                </div>
-                <div className="onboarding-step">
-                  <strong>3. Run the analysis</strong>
-                  <p>The algorithm calculates the fairest group choice and shows how much consensus you have.</p>
-                </div>
-                <div className="onboarding-step">
-                  <strong>4. Discuss</strong>
-                  <p>Use the chat panel to talk through results and next steps with your team.</p>
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={dontShowAgain}
-                    onChange={(e) => setDontShowAgain(e.target.checked)}
-                  />
-                  Don't show this again
-                </label>
-                <button className="secondary-button" onClick={dismissOnboarding} type="button">
-                  Skip
-                </button>
-                <button className="primary-button" onClick={dismissOnboarding} type="button">
-                  Got it
-                </button>
-              </div>
-            </div>
-          </div>
+          <OnboardingModal
+            dontShowAgain={dontShowAgain}
+            setDontShowAgain={setDontShowAgain}
+            onDismiss={dismissOnboarding}
+          />
         ) : null}
 
         {showEditProfile ? (
-          <div className="modal-overlay" role="dialog" aria-modal="true">
-            <div className="modal-card">
-              <h2>Edit Profile</h2>
-              <p className="subtitle">Update your display name.</p>
-              <form onSubmit={handleUpdateProfile} className="create-room-form" style={{ gap: 18 }}>
-                <label className="field">
-                  <span>Name</span>
-                  <input
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    placeholder="Your display name"
-                    required
-                  />
-                </label>
-                <div className="form-actions">
-                  <button className="primary-button" type="submit">Save Changes</button>
-                  <button className="secondary-button" type="button" onClick={() => setShowEditProfile(false)}>Cancel</button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <EditProfileModal
+            editName={editName}
+            setEditName={setEditName}
+            onSubmit={handleUpdateProfile}
+            onClose={() => setShowEditProfile(false)}
+          />
         ) : null}
 
         {showCreate ? (
-          <div className="panel" style={{ marginBottom: 20 }}>
-            <div className="section-heading">
-              <h2>Create a Voting Space</h2>
-              <p>Set up the trip decision and invite others with the voting space code.</p>
-            </div>
-            <form onSubmit={createSpace} className="create-room-form">
-              <div className="two-columns">
-                <label className="field">
-                  <span>Voting Space Name</span>
-                  <input value={spaceName} onChange={(e) => setSpaceName(e.target.value)} placeholder="e.g. Summer Trip 2025" required />
-                </label>
-                <label className="field">
-                  <span>Decision Question</span>
-                  <input value={spaceTitle} onChange={(e) => setSpaceTitle(e.target.value)} placeholder="e.g. Where should we travel?" required />
-                </label>
-              </div>
-              <label className="field">
-                <span>Brief Description</span>
-                <textarea
-                  value={spaceDescription}
-                  onChange={(e) => setSpaceDescription(e.target.value)}
-                  placeholder="e.g. We'll be voting about a trip to Egypt. The voting will include budget, food, and accommodation options."
-                  rows={3}
-                  maxLength={1000}
-                  className="description-textarea"
-                />
-              </label>
-              <div className="two-columns">
-                <div>
-                  <h4>Alternatives</h4>
-                  {spaceAlternatives.map((alt, idx) => (
-                    <div className="inline-form" key={idx}>
-                      <input value={alt} onChange={(e) => {
-                        const next = [...spaceAlternatives];
-                        next[idx] = e.target.value;
-                        setSpaceAlternatives(next);
-                      }} placeholder={`Alternative ${idx + 1}`} required />
-                      {spaceAlternatives.length > 1 ? (
-                        <button type="button" className="secondary-button" onClick={() => setSpaceAlternatives(spaceAlternatives.filter((_, i) => i !== idx))}>Remove</button>
-                      ) : null}
-                    </div>
-                  ))}
-                  <button type="button" className="secondary-button" onClick={() => setSpaceAlternatives([...spaceAlternatives, ""])}>Add Alternative</button>
-                </div>
-                <div>
-                  <h4>Criteria</h4>
-                  {spaceCriteria.map((c, idx) => (
-                    <div className="inline-form" key={idx}>
-                      <input value={c.name} onChange={(e) => {
-                        const next = [...spaceCriteria];
-                        next[idx] = { ...next[idx], name: e.target.value };
-                        setSpaceCriteria(next);
-                      }} placeholder="Criterion name" required />
-                      <input type="number" min="0" max="100" value={c.weight} onChange={(e) => {
-                        const next = [...spaceCriteria];
-                        next[idx] = { ...next[idx], weight: Number(e.target.value) };
-                        setSpaceCriteria(next);
-                      }} style={{ width: 80 }} required />
-                      {spaceCriteria.length > 1 ? (
-                        <button type="button" className="secondary-button" onClick={() => setSpaceCriteria(spaceCriteria.filter((_, i) => i !== idx))}>Remove</button>
-                      ) : null}
-                    </div>
-                  ))}
-                  <button type="button" className="secondary-button" onClick={() => setSpaceCriteria([...spaceCriteria, { name: "", weight: 20 }])}>Add Criterion</button>
-                </div>
-              </div>
-              <div className="form-actions">
-                <button className="primary-button" type="submit">Create Space</button>
-                <button className="secondary-button" type="button" onClick={() => setShowCreate(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
+          <CreateSpaceForm
+            spaceName={spaceName}
+            setSpaceName={setSpaceName}
+            spaceTitle={spaceTitle}
+            setSpaceTitle={setSpaceTitle}
+            spaceDescription={spaceDescription}
+            setSpaceDescription={setSpaceDescription}
+            spaceAlternatives={spaceAlternatives}
+            setSpaceAlternatives={setSpaceAlternatives}
+            spaceCriteria={spaceCriteria}
+            setSpaceCriteria={setSpaceCriteria}
+            onSubmit={createSpace}
+            onCancel={() => setShowCreate(false)}
+          />
         ) : null}
 
         <div className="panel" style={{ marginBottom: 20 }}>
@@ -782,138 +622,44 @@ function App() {
 
   return (
     <div className="app-shell space-view">
-      {/* Notifications */}
-      <div className="notification-container">
-        {notifications.map((n) => (
-          <div key={n.id} className={`notification-toast ${n.type}`}>
-            <span>{n.message}</span>
-          </div>
-        ))}
-      </div>
+      <Notifications notifications={notifications} />
 
-      {/* Away Brief Popup */}
       {showAwayBrief && awayBriefData ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal-card brief-desc-modal">
-            <div className="brief-desc-icon">🔔</div>
-            <h2>While you were away</h2>
-            <p className="subtitle">{currentSpace?.name}</p>
-            <ul className="away-brief-list">
-              {awayBriefData.new_messages > 0 ? (
-                <li>📨 {awayBriefData.new_messages} new message{awayBriefData.new_messages > 1 ? "s" : ""}</li>
-              ) : null}
-              {awayBriefData.new_members > 0 ? (
-                <li>👤 {awayBriefData.new_members} new member{awayBriefData.new_members > 1 ? "s" : ""} joined</li>
-              ) : null}
-              {awayBriefData.new_ratings > 0 ? (
-                <li>⭐ {awayBriefData.new_ratings} new rating{awayBriefData.new_ratings > 1 ? "s" : ""} submitted</li>
-              ) : null}
-              {awayBriefData.new_messages === 0 && awayBriefData.new_members === 0 && awayBriefData.new_ratings === 0 ? (
-                <li>Nothing new since your last visit.</li>
-              ) : null}
-            </ul>
-            <button className="primary-button" onClick={() => setShowAwayBrief(false)} type="button">
-              Got it
-            </button>
-          </div>
-        </div>
+        <AwayBriefModal
+          data={awayBriefData}
+          spaceName={currentSpace?.name}
+          onClose={() => setShowAwayBrief(false)}
+        />
       ) : null}
 
-      {/* Brief Description Popup */}
       {showBriefDescription && spaceDesc.trim() ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal-card brief-desc-modal">
-            <div className="brief-desc-icon">📋</div>
-            <h2>Brief Description</h2>
-            <p className="subtitle">{currentSpace?.name}</p>
-            <div className="brief-desc-content">
-              <p>{spaceDesc}</p>
-            </div>
-            <button className="primary-button" onClick={() => setShowBriefDescription(false)} type="button">
-              Click to Continue
-            </button>
-          </div>
-        </div>
+        <BriefDescriptionModal
+          spaceName={currentSpace?.name}
+          description={spaceDesc}
+          onClose={() => setShowBriefDescription(false)}
+        />
       ) : null}
 
-      {/* Edit Space Modal */}
       {showEditSpace ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal-card">
-            <h2>Edit Voting Space</h2>
-            <p className="subtitle">Update the brief description for {currentSpace?.name}.</p>
-            <form onSubmit={handleUpdateSpace} className="create-room-form" style={{ gap: 18 }}>
-              <label className="field">
-                <span>Brief Description</span>
-                <textarea
-                  value={editSpaceDescription}
-                  onChange={(e) => setEditSpaceDescription(e.target.value)}
-                  placeholder="e.g. We'll be voting about a trip to Egypt..."
-                  rows={4}
-                  maxLength={1000}
-                  className="description-textarea"
-                />
-              </label>
-              <div className="form-actions">
-                <button className="primary-button" type="submit">Save Changes</button>
-                <button className="secondary-button" type="button" onClick={() => setShowEditSpace(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EditSpaceModal
+          value={editSpaceDescription}
+          setValue={setEditSpaceDescription}
+          spaceName={currentSpace?.name}
+          onSubmit={handleUpdateSpace}
+          onClose={() => setShowEditSpace(false)}
+        />
       ) : null}
 
-      {/* Edit Alternatives & Criteria Modal */}
       {showEditConfig ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal-card">
-            <h2>Edit Alternatives & Criteria</h2>
-            <p className="subtitle">Update the options and criteria for {currentSpace?.name}.</p>
-            <form onSubmit={handleUpdateConfig} className="create-room-form" style={{ gap: 18 }}>
-              <div>
-                <h4>Alternatives</h4>
-                {editAlternatives.map((alt, idx) => (
-                  <div className="inline-form" key={idx}>
-                    <input value={alt} onChange={(e) => {
-                      const next = [...editAlternatives];
-                      next[idx] = e.target.value;
-                      setEditAlternatives(next);
-                    }} placeholder={`Alternative ${idx + 1}`} required />
-                    {editAlternatives.length > 1 ? (
-                      <button type="button" className="secondary-button" onClick={() => setEditAlternatives(editAlternatives.filter((_, i) => i !== idx))}>Remove</button>
-                    ) : null}
-                  </div>
-                ))}
-                <button type="button" className="secondary-button" onClick={() => setEditAlternatives([...editAlternatives, ""])}>Add Alternative</button>
-              </div>
-              <div>
-                <h4>Criteria</h4>
-                {editCriteria.map((c, idx) => (
-                  <div className="inline-form" key={idx}>
-                    <input value={c.name} onChange={(e) => {
-                      const next = [...editCriteria];
-                      next[idx] = { ...next[idx], name: e.target.value };
-                      setEditCriteria(next);
-                    }} placeholder="Criterion name" required />
-                    <input type="number" min="0" max="100" value={c.weight} onChange={(e) => {
-                      const next = [...editCriteria];
-                      next[idx] = { ...next[idx], weight: Number(e.target.value) };
-                      setEditCriteria(next);
-                    }} style={{ width: 80 }} required />
-                    {editCriteria.length > 1 ? (
-                      <button type="button" className="secondary-button" onClick={() => setEditCriteria(editCriteria.filter((_, i) => i !== idx))}>Remove</button>
-                    ) : null}
-                  </div>
-                ))}
-                <button type="button" className="secondary-button" onClick={() => setEditCriteria([...editCriteria, { name: "", weight: 20 }])}>Add Criterion</button>
-              </div>
-              <div className="form-actions">
-                <button className="primary-button" type="submit">Save Changes</button>
-                <button className="secondary-button" type="button" onClick={() => setShowEditConfig(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <EditConfigModal
+          alternatives={editAlternatives}
+          setAlternatives={setEditAlternatives}
+          criteria={editCriteria}
+          setCriteria={setEditCriteria}
+          spaceName={currentSpace?.name}
+          onSubmit={handleUpdateConfig}
+          onClose={() => setShowEditConfig(false)}
+        />
       ) : null}
 
       <header className="topbar">
@@ -1058,76 +804,17 @@ function App() {
                     </p>
                   </div>
 
-                  <div className="rating-stack">
-                    <article className="rating-block">
-                      <div className="rating-block-header">
-                        <h3>Your Criteria Weights</h3>
-                        <span>{user?.name || user?.username}</span>
-                      </div>
-                      <p className="subtitle" style={{ marginBottom: 12 }}>
-                        How important is each criterion to you? Pick a label from "Not Important" to "Essential".
-                      </p>
-                      <div className="rating-grid">
-                        {criteria.map((criterion) => (
-                          <div className="rating-row" key={`weight-${criterion.name}`}>
-                            <div>
-                              <strong>{criterion.name}</strong>
-                            </div>
-                            <div className="score-picker">
-                              {[1, 2, 3, 4, 5].map((score) => {
-                                const selected = weightsMap[criterion.name] === score;
-                                return (
-                                  <button
-                                    key={score}
-                                    className={`score-button is-word ${selected ? "is-selected" : ""}`}
-                                    onClick={() => setWeight(criterion.name, score)}
-                                    type="button"
-                                  >
-                                    {IMPORTANCE_LABELS[score]}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-
-                    {alternatives.map((alternative) => (
-                      <article className="rating-block" key={alternative}>
-                        <div className="rating-block-header">
-                          <h3>{alternative}</h3>
-                          <span>{user?.name || user?.username}</span>
-                        </div>
-                        <div className="rating-grid">
-                          {criteria.map((criterion) => (
-                            <div className="rating-row" key={`${alternative}-${criterion.name}`}>
-                              <div>
-                                <strong>{criterion.name}</strong>
-                                <p>Suggested importance: {criterion.weight}%</p>
-                              </div>
-                              <div className="score-picker">
-                                {[1, 2, 3, 4, 5].map((score) => {
-                                  const selected =
-                                    ratingsMap[ratingKey(user?.username, alternative, criterion.name)] === score;
-                                  return (
-                                    <button
-                                      key={score}
-                                      className={`score-button is-word ${selected ? "is-selected" : ""}`}
-                                      onClick={() => setRating(alternative, criterion.name, score)}
-                                      type="button"
-                                    >
-                                      {PREFERENCE_LABELS[score]}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                  <RatingPanel
+                    criteria={criteria}
+                    alternatives={alternatives}
+                    weightsMap={weightsMap}
+                    ratingsMap={ratingsMap}
+                    username={user?.username}
+                    ownerLabel={user?.name || user?.username}
+                    onWeight={setWeight}
+                    onRating={setRating}
+                    weightsHint={'How important is each criterion to you? Pick a label from "Not Important" to "Essential".'}
+                  />
                   <button className="primary-button" onClick={runAnalysis} type="button" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <span className="loading-dots">Analyzing<span>.</span><span>.</span><span>.</span></span>
@@ -1243,110 +930,63 @@ function App() {
                 <h2>Consensus Phase</h2>
                 <p>See how close the group is to agreeing, talk it through, and update your ratings to get closer.</p>
               </div>
-              {analysis ? (
+              {analysis !== undefined ? (
                 <div className="consensus-panel">
                   <div className="intro-card">
                     <h4>What "agreement" means here</h4>
                     <p>
                       Agreement strength shows how strongly the group leans towards one option. The group has
-                      a clear, settled decision once it reaches <strong>{analysis.agreementThreshold ?? 50}%</strong> or more.
+                      a clear, settled decision once it reaches <strong>50%</strong> or more.
                       Below that, opinions are still split and it's worth talking it through.
                     </p>
                   </div>
-                  {analysis.consensusReached ? (
-                    <div className="consensus-ok-card">
-                      <h4>✅ The group agrees</h4>
-                      <p>Everyone is well-aligned. Agreement strength: {analysis.agreementStrength}% (a clear decision needs {analysis.agreementThreshold ?? 50}%).</p>
-                    </div>
+                  {analysis ? (
+                    <>
+                      {analysis.consensusReached ? (
+                        <div className="consensus-ok-card">
+                          <h4>✅ The group agrees</h4>
+                          <p>Everyone is well-aligned. Agreement strength: {analysis.agreementStrength}% (a clear decision needs {analysis.agreementThreshold ?? 50}%).</p>
+                        </div>
+                      ) : (
+                        <div className="deviator-card">
+                          <h4>⚠️ The group hasn't agreed yet</h4>
+                          <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 50}%). Most different opinion: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>.</p>
+                          <p style={{ marginTop: 8 }}>Try discussing where opinions differ and updating your ratings to get closer together.</p>
+                        </div>
+                      )}
+
+                      <div className="intro-card">
+                        <h4>What to do next</h4>
+                        <ul className="clean-list">
+                          {analysis.consensusSteps.map((step) => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </>
                   ) : (
-                    <div className="deviator-card">
-                      <h4>⚠️ The group hasn't agreed yet</h4>
-                      <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 50}%). Most different opinion: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>.</p>
-                      <p style={{ marginTop: 8 }}>Try discussing where opinions differ and updating your ratings to get closer together.</p>
+                    <div className="intro-card">
+                      <h4>Results need refreshing</h4>
+                      <p>You've updated your ratings. Press <strong>Re-run Analysis</strong> at the bottom to see the latest agreement strength and group result.</p>
                     </div>
                   )}
-
-                  <div className="intro-card">
-                    <h4>What to do next</h4>
-                    <ul className="clean-list">
-                      {analysis.consensusSteps.map((step) => (
-                        <li key={step}>{step}</li>
-                      ))}
-                    </ul>
-                  </div>
 
                   <div className="intro-card">
                     <h4>Quick Re-vote</h4>
                     <p className="subtitle" style={{ marginBottom: 12 }}>
                       Adjust your ratings below to help the group reach consensus.
                     </p>
-                    <div className="rating-stack">
-                      <article className="rating-block">
-                        <div className="rating-block-header">
-                          <h3>Your Criteria Weights</h3>
-                          <span>{user?.name || user?.username}</span>
-                        </div>
-                        <div className="rating-grid">
-                          {criteria.map((criterion) => (
-                            <div className="rating-row" key={`consensus-weight-${criterion.name}`}>
-                              <div>
-                                <strong>{criterion.name}</strong>
-                              </div>
-                              <div className="score-picker">
-                                {[1, 2, 3, 4, 5].map((score) => {
-                                  const selected = weightsMap[criterion.name] === score;
-                                  return (
-                                    <button
-                                      key={score}
-                                      className={`score-button is-word ${selected ? "is-selected" : ""}`}
-                                      onClick={() => setWeight(criterion.name, score)}
-                                      type="button"
-                                    >
-                                      {IMPORTANCE_LABELS[score]}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </article>
-
-                      {alternatives.map((alternative) => (
-                        <article className="rating-block" key={`consensus-${alternative}`}>
-                          <div className="rating-block-header">
-                            <h3>{alternative}</h3>
-                            <span>{user?.name || user?.username}</span>
-                          </div>
-                          <div className="rating-grid">
-                            {criteria.map((criterion) => (
-                              <div className="rating-row" key={`consensus-${alternative}-${criterion.name}`}>
-                                <div>
-                                  <strong>{criterion.name}</strong>
-                                  <p>Suggested importance: {criterion.weight}%</p>
-                                </div>
-                                <div className="score-picker">
-                                  {[1, 2, 3, 4, 5].map((score) => {
-                                    const selected =
-                                      ratingsMap[ratingKey(user?.username, alternative, criterion.name)] === score;
-                                    return (
-                                      <button
-                                        key={score}
-                                        className={`score-button is-word ${selected ? "is-selected" : ""}`}
-                                        onClick={() => setRating(alternative, criterion.name, score)}
-                                        type="button"
-                                      >
-                                        {PREFERENCE_LABELS[score]}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                    <RatingPanel
+                      criteria={criteria}
+                      alternatives={alternatives}
+                      weightsMap={weightsMap}
+                      ratingsMap={ratingsMap}
+                      username={user?.username}
+                      ownerLabel={user?.name || user?.username}
+                      onWeight={setWeight}
+                      onRating={setRating}
+                      keyPrefix="consensus-"
+                    />
                     <button className="primary-button" onClick={runAnalysis} type="button" disabled={isSubmitting} style={{ marginTop: 16 }}>
                       {isSubmitting ? (
                         <span className="loading-dots">Analyzing<span>.</span><span>.</span><span>.</span></span>
@@ -1369,84 +1009,24 @@ function App() {
 
         </section>
 
-        <aside className="sidebar">
-          {spaceDesc.trim() ? (
-            <section className="sidebar-panel">
-              <button
-                className="brief-desc-button"
-                onClick={() => setShowBriefDescription(true)}
-                type="button"
-                style={{ display: 'flex', width: '100%', justifyContent: 'center' }}
-              >
-                📋 Brief Description
-              </button>
-            </section>
-          ) : null}
-          <section className="sidebar-panel chat-sidebar-panel">
-            <div className="section-heading">
-              <h3>Chat</h3>
-            </div>
-            <div className="chat-messages sidebar-chat-messages" ref={messagesContainerRef}>
-              {messages.map((msg) => (
-                <div className={`chat-message ${msg.author === user?.username ? "is-me" : ""}`} key={msg.id}>
-                  <span className="chat-author">{msg.author_name || msg.author}</span>
-                  <span className="chat-content">{msg.content}</span>
-                  <span className="chat-time">{new Date(msg.created_at).toLocaleTimeString()}</span>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-            <form className="inline-form chat-form" onSubmit={sendMessage}>
-              <input value={messageDraft} onChange={(e) => setMessageDraft(e.target.value)} placeholder="Type a message..." />
-              <button className="primary-button" type="submit">Send</button>
-            </form>
-          </section>
-
-          <section className="sidebar-panel">
-            <p className="eyebrow">Voting Space Info</p>
-            <h3>{currentSpace?.name}</h3>
-            <p className="subtitle">Code: <strong>{currentSpace?.code}</strong></p>
-            <p className="subtitle">Share this code to invite others.</p>
-          </section>
-
-          <section className="sidebar-panel">
-            <h3>Members</h3>
-            <div className="chip-list">
-              {participantNames.map((p) => (
-                <span className="editable-chip" key={p}>{p}</span>
-              ))}
-            </div>
-          </section>
-
-          <section className="sidebar-panel">
-            <div className="progress-head">
-              <h3>Group Voting Progress</h3>
-              <span>{completion}%</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${completion}%` }} />
-            </div>
-            <dl className="stats-list">
-              <div>
-                <dt>Members</dt>
-                <dd>{participants.length}</dd>
-              </div>
-              <div>
-                <dt>Options</dt>
-                <dd>{alternatives.length}</dd>
-              </div>
-              <div>
-                <dt>Criteria</dt>
-                <dd>{criteria.length}</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="sidebar-panel">
-            <h3>Status</h3>
-            <p>{status || "Ready"}</p>
-          </section>
-        </aside>
+        <Sidebar
+          spaceDesc={spaceDesc}
+          onShowBriefDescription={() => setShowBriefDescription(true)}
+          messages={messages}
+          user={user}
+          messagesContainerRef={messagesContainerRef}
+          messagesEndRef={messagesEndRef}
+          messageDraft={messageDraft}
+          setMessageDraft={setMessageDraft}
+          onSendMessage={sendMessage}
+          currentSpace={currentSpace}
+          participantNames={participantNames}
+          participants={participants}
+          alternatives={alternatives}
+          criteria={criteria}
+          completion={completion}
+          status={status}
+        />
       </main>
     </div>
   );
