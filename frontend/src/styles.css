@@ -400,10 +400,16 @@ button {
 }
 
 .score-picker {
-  min-width: 240px;
-  gap: 6px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 3px;
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 460px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-md);
 }
 
 .score-button {
@@ -427,22 +433,40 @@ button {
   transform: scale(1.04);
 }
 
-/* Word-label rating buttons (e.g. "Strongly Preferred") need a pill shape
-   instead of the small numeric circle. Kept compact, like an Apple
-   segmented control. */
+/* Word-label options render as equal-width cells of an Apple-style
+   segmented control. Equal columns mean a long label like "Strongly
+   Preferred" wraps inside its own cell instead of stretching the row. */
 .score-button.is-word {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: auto;
-  height: auto;
-  min-height: 28px;
-  padding: 5px 12px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--line);
-  font-size: 0.74rem;
+  height: 100%;
+  min-height: 46px;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  font-size: 0.72rem;
   font-weight: 500;
-  line-height: 1.15;
+  line-height: 1.18;
   letter-spacing: -0.01em;
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.score-button.is-word:hover:not(.is-selected) {
+  background: rgba(0, 0, 0, 0.06);
+  transform: none;
+}
+
+.score-button.is-word.is-selected {
+  background: var(--accent);
+  color: #fff;
+  transform: none;
+  box-shadow: 0 1px 5px rgba(0, 122, 255, 0.3);
 }
 
 .stat-hint {
@@ -1226,8 +1250,8 @@ button {
 
   .score-picker {
     min-width: 0;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    max-width: none;
+    width: 100%;
   }
 
   .ranking-row {
@@ -2178,12 +2202,8 @@ form.create-room-form {
   transition: opacity 200ms ease;
 }
 
-/* Score picker hover */
-.score-picker:hover .score-button:not(.is-selected) {
-  opacity: 0.8;
-}
-
-/* Score button selected glow */
+/* Score button selected glow (numeric circles only; word segments handle
+   their own selected styling in the segmented control above). */
 .score-button.is-selected {
   box-shadow: 0 1px 6px rgba(0, 122, 255, 0.22);
 }
