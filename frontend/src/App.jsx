@@ -953,6 +953,20 @@ function App() {
                         <div className="deviator-card">
                           <h4>⚠️ The group hasn't agreed yet</h4>
                           <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 70}%).</p>
+                          {(() => {
+                            const maj = analysis.participantMajority;
+                            if (maj && maj.count > 0 && maj.total > 1) {
+                              const fraction = maj.count / maj.total;
+                              if (fraction >= 2 / 3 && !analysis.consensusReached) {
+                                return (
+                                  <p style={{ marginTop: 8 }}>
+                                    <strong>{maj.count} of {maj.total}</strong> participants individually prefer <strong>{maj.alternative}</strong> — a majority is forming.
+                                  </p>
+                                );
+                              }
+                            }
+                            return null;
+                          })()}
                           {analysis.criticalConflict ? (
                             <p style={{ marginTop: 8 }}>
                               Biggest sticking point: <strong>{conflictLabel(analysis.criticalConflict)}</strong>. Opinions are differentiated the most here — aligning on this one point could raise agreement to about <strong>{analysis.criticalConflict.projectedStrength}%</strong>.

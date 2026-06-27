@@ -289,8 +289,22 @@ def run_montecarlo_saw(
     # Consensus measure: entropy of the rank-1 acceptability distribution.
     # 0 → one alternative wins every iteration (full consensus).
     # log2(num_alts) → winners are spread equally (no consensus).
-    rank1_probs = [winner_acceptability[a] / iterations for a in alternatives]
-    consensus_entropy = compute_entropy(rank1_probs)
+    #
+    # Edge-case: when everyone agrees on every cell (zero spread everywhere),
+    # the SAW scores are identical across alternatives and every scenario ties.
+    # That pushes the win distribution flat → maximum entropy → 0% agreement,
+    # which is the wrong answer — perfect agreement should be 100%.
+    # Detect it by checking that every empirical distribution has exactly one
+    # unique value (single-element unique_values list from _frequency_distribution).
+    _all_cells_agreed = all(
+        len(vals) == 1
+        for vals, _ in list(rating_dist.values()) + weight_dist
+    )
+    if _all_cells_agreed:
+        consensus_entropy = 0.0
+    else:
+        rank1_probs = [winner_acceptability[a] / iterations for a in alternatives]
+        consensus_entropy = compute_entropy(rank1_probs)
 
     h_cutoff = _CONSENSUS_CUTOFF_FACTOR * math.log2(num_alts) if num_alts > 1 else 0.0
     consensus_reached = consensus_entropy <= h_cutoff
@@ -678,6 +692,28 @@ def analyze_decision(
             f"In {round(win_prob_top * 100, 1)}% of tested scenarios, {top_choice['alternative']} comes out as the group's top choice."
         )
 
+    # How many participants individually prefer the group's top choice.
+    # Computed from each person's own weights + ratings (deterministic SAW),
+    # so it reflects personal preferences rather than simulated uncertainty.
+    participant_majority: dict[str, object] = {"alternative": None, "count": 0, "total": len(normalized_participants)}
+    if top_choice and normalized_participants:
+        group_top = str(top_choice["alternative"])
+        majority_count = 0
+        for p in normalized_participants:
+            p_w = judgements[p]["w"]
+            total_pw = sum(p_w)
+            p_scores = {}
+            for a in normalized_alternatives:
+                s = sum(
+                    (judgements[p][a][ci] if judgements[p][a][ci] is not None else cell_avg[(a, str(normalized_criteria[ci]["name"]))])
+                    * (p_w[ci] / total_pw if total_pw > 0 else 1.0 / len(normalized_criteria))
+                    for ci in range(len(normalized_criteria))
+                )
+                p_scores[a] = s
+            if p_scores and max(p_scores, key=p_scores.get) == group_top:
+                majority_count += 1
+        participant_majority = {"alternative": group_top, "count": majority_count, "total": len(normalized_participants)}
+
     # Consensus steps (plain English)
     cutoff = float(discord_result.get("entropy_cutoff", _CONSENSUS_CUTOFF_FACTOR * math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0))
     entropy_value = float(discord_result["entropy"])
@@ -760,6 +796,7 @@ def analyze_decision(
         "consensusReached": consensus_reached,
         "criticalConflict": critical_conflict_payload,
         "topDeviator": None,
+        "participantMajority": participant_majority,
         "entropy": entropy_value,
         "entropyCutoff": cutoff,
         "agreementStrength": agreement_strength,
