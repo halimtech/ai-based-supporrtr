@@ -450,11 +450,11 @@ function App() {
   }
 
   const participants = spaceData?.members?.map((m) => m.username) || [];
-  const memberDisplayMap = (spaceData?.members || []).reduce((map, m) => {
-    map[m.username] = m.name || m.username;
-    return map;
-  }, {});
-  const displayName = (username) => memberDisplayMap[username] || username;
+  const conflictLabel = (conflict) => {
+    if (!conflict) return "";
+    if (conflict.kind === "weight") return `how important “${conflict.criterion}” should be`;
+    return `“${conflict.criterion}” for ${conflict.alternative}`;
+  };
   const participantNames = spaceData?.members?.map((m) => m.name || m.username) || [];
   const alternatives = spaceData?.space?.alternatives || [];
   const criteria = spaceData?.space?.criteria || [];
@@ -840,9 +840,11 @@ function App() {
                       <p>
                         <strong>{analysis.consensusReached ? "The group agrees 🎉" : "The group hasn't agreed yet"}</strong>
                         {typeof analysis.agreementStrength === "number"
-                          ? ` — Agreement strength: ${analysis.agreementStrength}% (a clear decision needs ${analysis.agreementThreshold ?? 50}%)`
+                          ? ` — Agreement strength: ${analysis.agreementStrength}% (a clear decision needs ${analysis.agreementThreshold ?? 70}%)`
                           : ""}
-                        {analysis.topDeviator ? ` — Most different opinion: ${displayName(analysis.topDeviator)}` : ""}
+                        {!analysis.consensusReached && analysis.criticalConflict
+                          ? ` — Biggest sticking point: ${conflictLabel(analysis.criticalConflict)}`
+                          : ""}
                       </p>
                     </div>
                   ) : null}
@@ -936,7 +938,7 @@ function App() {
                     <h4>What "agreement" means here</h4>
                     <p>
                       Agreement strength shows how strongly the group leans towards one option. The group has
-                      a clear, settled decision once it reaches <strong>50%</strong> or more.
+                      a clear, settled decision once it reaches <strong>70%</strong> or more.
                       Below that, opinions are still split and it's worth talking it through.
                     </p>
                   </div>
@@ -945,13 +947,20 @@ function App() {
                       {analysis.consensusReached ? (
                         <div className="consensus-ok-card">
                           <h4>✅ The group agrees</h4>
-                          <p>Everyone is well-aligned. Agreement strength: {analysis.agreementStrength}% (a clear decision needs {analysis.agreementThreshold ?? 50}%).</p>
+                          <p>Everyone is well-aligned. Agreement strength: {analysis.agreementStrength}% (a clear decision needs {analysis.agreementThreshold ?? 70}%).</p>
                         </div>
                       ) : (
                         <div className="deviator-card">
                           <h4>⚠️ The group hasn't agreed yet</h4>
-                          <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 50}%). Most different opinion: <strong>{displayName(analysis.topDeviator) || "Unknown"}</strong>.</p>
-                          <p style={{ marginTop: 8 }}>Try discussing where opinions differ and updating your ratings to get closer together.</p>
+                          <p>Agreement strength: <strong>{analysis.agreementStrength}%</strong> (a clear decision needs {analysis.agreementThreshold ?? 70}%).</p>
+                          {analysis.criticalConflict ? (
+                            <p style={{ marginTop: 8 }}>
+                              Biggest sticking point: <strong>{conflictLabel(analysis.criticalConflict)}</strong>. Opinions are differentiated the most here — aligning on this one point could raise agreement to about <strong>{analysis.criticalConflict.projectedStrength}%</strong>.
+                            </p>
+                          ) : (
+                            <p style={{ marginTop: 8 }}>Opinions are split across several options — talk through the main differences.</p>
+                          )}
+                          <p style={{ marginTop: 8 }}>Discuss just this point, update your ratings, then re-run the analysis. Resolve one conflict at a time.</p>
                         </div>
                       )}
 

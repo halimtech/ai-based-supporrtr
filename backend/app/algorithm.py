@@ -116,12 +116,10 @@ def validate_input(
             errors.append(f"unknown alternative in rating: {a}")
         if c not in criterion_names:
             errors.append(f"unknown criterion in rating: {c}")
-    for p in participants:
-        for a in alternatives:
-            for c in criteria:
-                key = f"{p}__{a}__{c['name']}"
-                if key not in ratings_lookup:
-                    errors.append(f"missing rating for {p} / {a} / {c['name']}")
+    # NOTE: a full grid is intentionally NOT required. Participants may abstain
+    # on individual cells (real groups rarely rate everything), so each
+    # (alternative, criterion) cell simply uses whatever opinions exist. The
+    # Monte Carlo falls back to a neutral value only for completely empty cells.
     if errors:
         preview = "\n- ".join(errors[:12])
         more = "" if len(errors) <= 12 else f"\n- ... and {len(errors) - 12} more"
@@ -142,8 +140,8 @@ def compute_deviation_scores(judgements: dict, criteria: list[str], alternatives
     mu_scores = {c: {} for c in criteria}
     for ci, c in enumerate(criteria):
         for a in alternatives:
-            vals = [judgements[p][a][ci] for p in persons]
-            mu_scores[c][a] = sum(vals) / len(vals)
+            vals = [judgements[p][a][ci] for p in persons if judgements[p][a][ci] is not None]
+            mu_scores[c][a] = (sum(vals) / len(vals)) if vals else 5.0
     deviations = {}
     for p in persons:
         wP = judgements[p]["w"]
@@ -152,6 +150,8 @@ def compute_deviation_scores(judgements: dict, criteria: list[str], alternatives
         for ci, c in enumerate(criteria):
             for a in alternatives:
                 s_pa = judgements[p][a][ci]
+                if s_pa is None:
+                    continue
                 mu = mu_scores[c][a]
                 dev_s += abs(s_pa - mu)
         deviations[p] = dev_w + dev_s
@@ -185,6 +185,22 @@ def _frequency_distribution(values: list[float]) -> tuple[list[float], list[int]
     return [v for v, _ in items], [c for _, c in items]
 
 
+# Consensus is considered "reached" once the group's agreement strength
+# (1 - normalised entropy of the rank-1 distribution) is at or above this
+# percentage. A 70% "soft consensus" keeps the top ranking stable while still
+# saving discussion time. Raising it from 50% to 70% leaves much less room for
+# the top rankings to shift around afterwards.
+CONSENSUS_THRESHOLD_PCT = 70
+_CONSENSUS_CUTOFF_FACTOR = 1 - CONSENSUS_THRESHOLD_PCT / 100  # 0.30 of max entropy
+
+# Monte-Carlo iterations used when probing which single conflict, if resolved,
+# would raise the agreement strength the most. Fewer than the headline run
+# because common-random-numbers (a fixed seed per probe) make the before/after
+# comparison stable even at a lower iteration count.
+CONFLICT_SEARCH_ITERATIONS = 1500
+CONFLICT_SEARCH_SEED = 12345
+
+
 def run_montecarlo_saw(
     judgements: dict,
     criteria: list[str],
@@ -206,7 +222,9 @@ def run_montecarlo_saw(
     rating_dist: dict[tuple[int, str], tuple[list[float], list[int]]] = {}
     for c_index in range(num_criteria):
         for a in alternatives:
-            values = [judgements[p][a][c_index] for p in persons]
+            values = [v for p in persons if (v := judgements[p][a][c_index]) is not None]
+            if not values:
+                values = [5.0]
             rating_dist[(c_index, a)] = _frequency_distribution(values)
 
     weight_dist: list[tuple[list[float], list[int]]] = []
@@ -274,7 +292,7 @@ def run_montecarlo_saw(
     rank1_probs = [winner_acceptability[a] / iterations for a in alternatives]
     consensus_entropy = compute_entropy(rank1_probs)
 
-    h_cutoff = 0.5 * math.log2(num_alts) if num_alts > 1 else 0.0
+    h_cutoff = _CONSENSUS_CUTOFF_FACTOR * math.log2(num_alts) if num_alts > 1 else 0.0
     consensus_reached = consensus_entropy <= h_cutoff
 
     # Always identify the most outlying participant — useful both for
@@ -292,6 +310,119 @@ def run_montecarlo_saw(
         "rank_prob": rank_prob_df,
         "winner_counts": dict(winner_acceptability),
     }
+
+
+# =========================================================
+# SINGLE MOST-CRITICAL CONFLICT
+# =========================================================
+
+
+def _agreement_strength_pct(entropy: float, num_alts: int) -> int:
+    """Convert a rank-1 entropy into a 0–100 agreement-strength percentage."""
+    max_entropy = math.log2(num_alts) if num_alts > 1 else 0.0
+    if max_entropy <= 0:
+        return 100
+    return round((1 - entropy / max_entropy) * 100)
+
+
+def _resolved_judgements_cell(judgements: dict, alternative: str, c_index: int, value: float) -> dict:
+    """Clone judgements with one rating cell collapsed to a shared value."""
+    clone: dict = {}
+    for person, data in judgements.items():
+        new_data = dict(data)
+        new_row = list(data[alternative])
+        new_row[c_index] = value
+        new_data[alternative] = new_row
+        clone[person] = new_data
+    return clone
+
+
+def _resolved_judgements_weight(judgements: dict, c_index: int, value: float) -> dict:
+    """Clone judgements with one criterion weight collapsed to a shared value."""
+    clone: dict = {}
+    for person, data in judgements.items():
+        new_data = dict(data)
+        new_w = list(data["w"])
+        new_w[c_index] = value
+        new_data["w"] = new_w
+        clone[person] = new_data
+    return clone
+
+
+def find_critical_conflict(
+    judgements: dict,
+    criteria: list[str],
+    alternatives: list[str],
+    iterations: int = CONFLICT_SEARCH_ITERATIONS,
+    seed: int = CONFLICT_SEARCH_SEED,
+) -> dict | None:
+    """Find the single item whose resolution would raise agreement the most.
+
+    A "conflict item" is one rating cell (a criterion for one alternative) or one
+    criterion's importance weight — never a person. "Resolving" it means everyone
+    adopting the group-average value for that one item. We re-run the Monte Carlo
+    with that item pinned and keep the item that lifts the agreement strength the
+    most. Using common random numbers (the same fixed seed for every probe) makes
+    the comparison stable, so the winner reflects a real consensus gain rather
+    than sampling noise. The group resolves one conflict at a time and re-runs.
+    """
+    persons = list(judgements.keys())
+    if len(persons) < 2:
+        return None
+    num_alts = len(alternatives)
+
+    random.seed(seed)
+    base = run_montecarlo_saw(judgements, criteria, alternatives, iterations=iterations)
+    base_strength = _agreement_strength_pct(base["entropy"], num_alts)
+
+    candidates: list[dict] = []
+
+    # Rating-cell conflicts: a criterion evaluated for a specific alternative.
+    for c_index, c_name in enumerate(criteria):
+        for alt in alternatives:
+            vals = [v for p in persons if (v := judgements[p][alt][c_index]) is not None]
+            if len(vals) < 2:
+                continue
+            spread = max(vals) - min(vals)
+            if spread == 0:
+                continue
+            resolved_value = round(sum(vals) / len(vals))
+            resolved = _resolved_judgements_cell(judgements, alt, c_index, resolved_value)
+            random.seed(seed)
+            probe = run_montecarlo_saw(resolved, criteria, alternatives, iterations=iterations)
+            new_strength = _agreement_strength_pct(probe["entropy"], num_alts)
+            candidates.append({
+                "kind": "rating",
+                "criterion": c_name,
+                "alternative": alt,
+                "spread": spread,
+                "improvement": new_strength - base_strength,
+            })
+
+    # Weight conflicts: how important a criterion should be.
+    for c_index, c_name in enumerate(criteria):
+        wvals = [judgements[p]["w"][c_index] for p in persons]
+        spread = max(wvals) - min(wvals)
+        if spread == 0:
+            continue
+        resolved_value = round(sum(wvals) / len(wvals))
+        resolved = _resolved_judgements_weight(judgements, c_index, resolved_value)
+        random.seed(seed)
+        probe = run_montecarlo_saw(resolved, criteria, alternatives, iterations=iterations)
+        new_strength = _agreement_strength_pct(probe["entropy"], num_alts)
+        candidates.append({
+            "kind": "weight",
+            "criterion": c_name,
+            "alternative": None,
+            "spread": spread,
+            "improvement": new_strength - base_strength,
+        })
+
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda item: (item["improvement"], item["spread"]))
+    best["base_strength"] = base_strength
+    return best
 
 
 # =========================================================
@@ -342,7 +473,8 @@ def _build_judgements(
             scores = []
             for c in criteria:
                 key = f"{p}__{a}__{c['name']}"
-                scores.append(float(ratings_lookup.get(key, 5)))
+                raw = ratings_lookup.get(key)
+                scores.append(float(raw) if raw is not None else None)
             judgements[p][a] = scores
     return judgements
 
@@ -457,6 +589,21 @@ def analyze_decision(
         else:
             winner_probabilities[alt] = 0.0
 
+    # Average opinion per (alternative, criterion) cell — used to impute a
+    # neutral value for participants who did not rate that specific cell, so the
+    # deterministic display score stays representative without inventing data
+    # (absent opinions simply fall back to the group's average for that cell).
+    cell_avg: dict[tuple[str, str], float] = {}
+    for alt in normalized_alternatives:
+        for c in normalized_criteria:
+            cname = str(c["name"])
+            present = [
+                ratings_lookup[k]
+                for p in normalized_participants
+                if (k := f"{p}__{alt}__{cname}") in ratings_lookup
+            ]
+            cell_avg[(alt, cname)] = (sum(present) / len(present)) if present else 5.0
+
     # Build deterministic display results using average weights + average ratings
     results: list[dict[str, object]] = []
     for alt in normalized_alternatives:
@@ -467,7 +614,8 @@ def analyze_decision(
             total_w = sum(judgements[p]["w"])
             for ci, c in enumerate(normalized_criteria):
                 key = f"{p}__{alt}__{c['name']}"
-                val = float(ratings_lookup.get(key, 5))
+                raw = ratings_lookup.get(key)
+                val = float(raw) if raw is not None else cell_avg[(alt, str(c["name"]))]
                 w = judgements[p]["w"][ci]
                 if total_w > 0:
                     p_score += val * (w / total_w)
@@ -531,38 +679,67 @@ def analyze_decision(
         )
 
     # Consensus steps (plain English)
-    cutoff = float(discord_result.get("entropy_cutoff", 0.5 * math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0))
+    cutoff = float(discord_result.get("entropy_cutoff", _CONSENSUS_CUTOFF_FACTOR * math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0))
     entropy_value = float(discord_result["entropy"])
     max_entropy = math.log2(len(normalized_alternatives)) if len(normalized_alternatives) > 1 else 0.0
     if max_entropy > 0:
         agreement_strength = round((1 - entropy_value / max_entropy) * 100)
     else:
         agreement_strength = 100
-    agreement_threshold = 50  # consensus is reached at 50% agreement strength or higher
+    agreement_threshold = CONSENSUS_THRESHOLD_PCT  # consensus is reached at this agreement strength or higher
+    consensus_reached = bool(discord_result["consensus_reached"])
+
+    # Identify the single most critical conflict (an item, never a person) whose
+    # resolution would raise the agreement strength the most. The group discusses
+    # only this one point, updates ratings, and re-runs the analysis — repeating
+    # one conflict at a time until the threshold is reached.
+    critical_conflict_payload: dict[str, object] | None = None
+    if not consensus_reached:
+        conflict = find_critical_conflict(judgements, criteria_names, normalized_alternatives)
+        if conflict is not None:
+            projected = min(100, max(agreement_strength, agreement_strength + int(conflict["improvement"])))
+            critical_conflict_payload = {
+                "kind": conflict["kind"],
+                "criterion": conflict["criterion"],
+                "alternative": conflict["alternative"],
+                "currentStrength": agreement_strength,
+                "projectedStrength": projected,
+                "improvement": projected - agreement_strength,
+            }
+
     consensus_steps: list[str] = []
-    if discord_result["consensus_reached"]:
+    if consensus_reached:
         consensus_steps.append("The group agrees — one option clearly stands out as the favourite.")
         consensus_steps.append(
             f"Agreement strength: {agreement_strength}% (a clear group decision needs at least {agreement_threshold}%)."
         )
-        deviator = discord_result.get("top_deviator_always")
-        if deviator and entropy_value > 0:
-            consensus_steps.append(
-                f"{deviator}'s ratings differ the most from the rest of the group — a quick check-in could bring everyone fully in line."
-            )
     else:
-        top_person = discord_result["top_person"]
-        if top_person:
+        consensus_steps.append(
+            f"The group hasn't agreed yet — agreement strength is {agreement_strength}% "
+            f"(a clear group decision needs at least {agreement_threshold}%)."
+        )
+        if critical_conflict_payload is not None:
+            crit_name = critical_conflict_payload["criterion"]
+            alt_name = critical_conflict_payload["alternative"]
+            projected = critical_conflict_payload["projectedStrength"]
+            if critical_conflict_payload["kind"] == "weight":
+                consensus_steps.append(
+                    f"Regarding how important “{crit_name}” should be, opinions are differentiated the most right now."
+                )
+            else:
+                consensus_steps.append(
+                    f"Regarding “{crit_name}” for {alt_name}, opinions are differentiated the most right now."
+                )
             consensus_steps.append(
-                f"The group hasn't agreed yet. {top_person}'s ratings differ the most from everyone else."
+                f"Focus the discussion on just this one point — aligning on it could raise agreement to about {projected}%."
+            )
+            consensus_steps.append(
+                "Update your ratings for that point and re-run the analysis. Resolve one conflict at a time until you pass the threshold."
             )
         else:
-            consensus_steps.append("The group hasn't agreed yet — opinions are split across several options.")
-        consensus_steps.append(
-            f"Agreement strength: {agreement_strength}% (a clear group decision needs at least {agreement_threshold}%)."
-        )
-        consensus_steps.append("Talk through the main differences and update your ratings to move closer together.")
-        consensus_steps.append("Use the chat to share why people scored options differently.")
+            consensus_steps.append(
+                "Opinions are split across several options — talk through the main differences and update your ratings."
+            )
 
     return {
         "title": _clean_label(title or "Gemeinsame Entscheidung", "title"),
@@ -580,8 +757,9 @@ def analyze_decision(
         "winnerProbabilities": winner_probabilities,
         "insights": insights,
         "consensusSteps": consensus_steps,
-        "consensusReached": discord_result["consensus_reached"],
-        "topDeviator": discord_result["top_person"],
+        "consensusReached": consensus_reached,
+        "criticalConflict": critical_conflict_payload,
+        "topDeviator": None,
         "entropy": entropy_value,
         "entropyCutoff": cutoff,
         "agreementStrength": agreement_strength,
